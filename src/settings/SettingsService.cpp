@@ -7,6 +7,15 @@
 #include <stdexcept>
 #include <fstream>
 #include <filesystem>
+#include <sstream>
+#include <system_error>
+#include <cerrno>
+#include <cstdio>
+#include <cstdlib>
+
+#include <fcntl.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "Logger.h"
 
@@ -32,8 +41,12 @@ void SettingsService::LoadFromFile() {
 }
 
 void SettingsService::WriteToFile() {
-    const std::filesystem::path path(_filePath);
-    const std::filesystem::path dir = path.parent_path();
+    std::filesystem::path target(_filePath);
+    // A symlinked config keeps working: write to the file it points at, not over the link.
+    if (std::filesystem::is_symlink(target))
+        target = std::filesystem::weakly_canonical(target);
+
+    const std::filesystem::path dir = target.parent_path();
     if (std::filesystem::create_directories(dir)) {
         // A newly created config directory is private: the file holds device keys.
         std::filesystem::permissions(dir, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace);
@@ -46,13 +59,13 @@ void SettingsService::WriteToFile() {
     // Write a private temporary file beside the config, then rename it over the config.
     // mkstemp creates the file with mode 0600, so the keys are never readable by other users,
     // and the rename means a crash leaves either the old or the new file, never a truncated one.
-    std::string tmpPath = _filePath + ".XXXXXX";
+    std::string tmpPath = target.string() + ".XXXXXX";
     const int fd = mkstemp(tmpPath.data());
     if (fd < 0) {
-        throw std::runtime_error("Failed to open file for writing: " + _filePath + ": " + std::strerror(errno));
+        const int error = errno;
+        throw std::runtime_error("Failed to open file for writing: " + _filePath + ": " + std::generic_category().message(error));
     }
 
-    bool ok = true;
     int error = 0;
     const char* cursor = data.data();
     size_t left = data.size();
@@ -61,28 +74,32 @@ void SettingsService::WriteToFile() {
         if (written < 0) {
             if (errno == EINTR)
                 continue;
-            ok = false;
             error = errno;
+            break;
+        }
+        if (written == 0) {
+            error = EIO;
             break;
         }
         cursor += written;
         left -= static_cast<size_t>(written);
     }
-    if (ok && fsync(fd) != 0) {
-        ok = false;
+    if (error == 0 && fsync(fd) != 0)
         error = errno;
-    }
-    if (close(fd) != 0 && ok) {
-        ok = false;
+    if (close(fd) != 0 && error == 0)
         error = errno;
-    }
-    if (ok && rename(tmpPath.c_str(), _filePath.c_str()) != 0) {
-        ok = false;
+    if (error == 0 && std::rename(tmpPath.c_str(), target.c_str()) != 0)
         error = errno;
-    }
-    if (!ok) {
+    if (error != 0) {
         unlink(tmpPath.c_str());
-        throw std::runtime_error("Failed to write to file: " + _filePath + ": " + std::strerror(error));
+        throw std::runtime_error("Failed to write to file: " + _filePath + ": " + std::generic_category().message(error));
+    }
+
+    // Make the rename itself durable; best effort.
+    const int dirFd = open(dir.c_str(), O_RDONLY | O_DIRECTORY);
+    if (dirFd >= 0) {
+        fsync(dirFd);
+        close(dirFd);
     }
 }
 
