@@ -22,6 +22,13 @@ namespace MagicPodsCore{
         std::string activeProfile;
         std::vector<std::pair<std::string,std::string>> profiles;
 
+    // True for any A2DP playback profile. PulseAudio and older PipeWire name them
+    // "a2dp-sink*"; PipeWire 1.x also offers "a2dp-auto-prefer-quality" and
+    // "a2dp-auto-prefer-latency". Headset (HFP/HSP) profiles are "headset-head-unit*".
+    bool IsA2dpPlayback() const {
+        return activeProfile.starts_with("a2dp");
+    }
+
     bool operator==(const CardInfo& other) const {
         return index == other.index &&
                name == other.name &&

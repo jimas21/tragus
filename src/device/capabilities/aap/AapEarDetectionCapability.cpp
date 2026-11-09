@@ -58,7 +58,7 @@ namespace MagicPodsCore
 
         auto audioClient = device.GetAudioClient();
         auto card = audioClient->GetCardInfoByName(audioClient->GetNameFromMac(device.GetAddress()));
-        if (!card.has_value() || !card->activeProfile.starts_with("a2dp-sink"))
+        if (!card.has_value() || !card->IsA2dpPlayback())
             return;
 
         if (option.Status == DeviceEarStatus::NotWorn)

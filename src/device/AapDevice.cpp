@@ -93,7 +93,7 @@ namespace MagicPodsCore
 
         auto audioClient = GetAudioClient();
         auto card = audioClient->GetCardInfoByName(audioClient->GetNameFromMac(GetAddress()));
-        if (!card.has_value() || !card->activeProfile.starts_with("a2dp-sink"))
+        if (!card.has_value() || !card->IsA2dpPlayback())
             return;
 
         auto defaultSinkName = audioClient->GetDefaultSinkName();
