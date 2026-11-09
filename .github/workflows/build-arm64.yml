@@ -296,8 +296,9 @@ jobs:
           set +e
           ./dist/magicpodscore > "${RUNNER_TEMP}/smoke.log" 2>&1 &
           pid=$!
-          # Initialization (D-Bus, PulseAudio) runs before the IPv6 listener is
-          # opened and can take a few seconds without those services; wait up to 20 s.
+          # Both loopback listeners are bound before initialization; initialization
+          # (D-Bus, PulseAudio) can take a few seconds without those services, so
+          # wait up to 20 s for it.
           for _ in $(seq 1 20); do
             sleep 1
             kill -0 "${pid}" 2>/dev/null || break

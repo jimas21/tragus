@@ -499,7 +499,7 @@ int main(int argc, char** argv) {
         if (listen_socket) {
             Logger::Info("Listening on [%s]:%d", WEBSOCKET_HOST_IPV6, WEBSOCKET_PORT);
         } else {
-            Logger::Info("IPv6 loopback [%s]:%d not available, serving IPv4 loopback only", WEBSOCKET_HOST_IPV6, WEBSOCKET_PORT);
+            Logger::Warn("Could not listen on [%s]:%d (IPv6 disabled, or another process holds the port); serving IPv4 loopback only", WEBSOCKET_HOST_IPV6, WEBSOCKET_PORT);
         }
     });
 
