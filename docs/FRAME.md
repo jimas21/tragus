@@ -14,11 +14,19 @@ MagicPodsCore is a separate program. Clients talk to it over a local WebSocket
   MagicPodsCore never pairs on its own.
 - The desktop user's session: `HOME`, `XDG_RUNTIME_DIR`, the session bus
   (used only to pause/resume media players on ear removal) and
-  pipewire-pulse (optional audio features).
+  pipewire-pulse (optional audio features: if it is not reachable at start,
+  a warning is logged and those features stay off until a restart; battery,
+  noise control and ear detection are not affected).
 - These system libraries: `libbluetooth.so.3`, `libpulse.so.0`,
   `libsystemd.so.0`, `libcrypto.so.3`, `libz.so.1`, `libstdc++.so.6`,
   `libgcc_s.so.1`, glibc 2.35 or newer. FFmpeg (`libavcodec.so.58`,
   `libavutil.so.56`, AAC decoder only) is bundled in `lib/`.
+
+  On an Arch-based system these come from bluez-libs, libpulse, systemd-libs,
+  openssl, zlib, gcc-libs (its libstdc++ must provide `GLIBCXX_3.4.30`, i.e.
+  GCC 12 or newer) and glibc. If the root filesystem is read-only, a library
+  that `ldd` reports as not found cannot simply be installed, so run the
+  `ldd` check in step 5 first.
 
 No root, no `setcap`, no capabilities: the only Bluetooth sockets it opens are
 outbound L2CAP/RFCOMM connections, which an unprivileged user may make.
@@ -54,15 +62,23 @@ mkdir -p ~/.config/magicpods && chmod 700 ~/.config/magicpods
 ```
 
 - `animation = false`: the case-open animation keeps BlueZ discovery (an
-  active LE scan) running the whole time, which can disturb other Bluetooth
+  active LE scan) running the whole time any AirPods are paired, which can disturb other Bluetooth
   devices, and an unexpected discovery error at startup stops the process.
   Battery, noise control and ear detection do not need it.
 - `logLevel = 30` (warnings): at the default 20 every incoming WebSocket
   message is logged.
-- Ear detection pauses and resumes media players by default
-  (`ear_pause_media = true` in each device's section, created when the
-  headphones first connect). If a client handles pausing itself, it should
-  turn this off with `SetCapabilities` (all three keys are required):
+- Ear detection pauses and resumes media players by default: the per-device
+  `ear_pause_media` key counts as true when absent, and is written only after
+  a client changes it. To turn it off ahead of time, add a section named after
+  the headphones' address with colons replaced by underscores:
+
+  ```toml
+  [AA_BB_CC_DD_EE_FF]
+  ear_pause_media = false
+  ```
+
+  Or, at runtime, a client that handles pausing itself sends `SetCapabilities`
+  (all three keys are required):
 
   ```json
   {"method":"SetCapabilities","arguments":{"address":"AA:BB:CC:DD:EE:FF",
@@ -106,21 +122,29 @@ journalctl --user -u magicpodscore -f
 Do not add `PrivateNetwork=`: Bluetooth sockets live in the host network
 namespace. Only one instance can run (the port is exclusive; a second one
 exits), so a client that might also start it should first check whether the
-port is already served and attach instead.
+port is already served and attach instead. If something else held port 2020
+at start, the unit stops retrying after five attempts; free the port, then run
+`systemctl --user reset-failed magicpodscore && systemctl --user start magicpodscore`.
 
-## Security notes
+The unit starts with the user's systemd manager, i.e. when that user's session
+starts. On a device that logs the desktop user in automatically nothing more is
+needed. For the service to run before or without a login session, run
+`loginctl enable-linger "$USER"` once.
+
+## 4. Security notes
 
 - The WebSocket server listens on the loopback addresses only
   (`127.0.0.1:2020`, and `[::1]:2020` when IPv6 is available). It has no
   authentication, so any program running on the device can use it.
-- `GetSettingsAll` and `GetSettings` return the whole config, which includes
-  each AirPods' `irk` and `enc` keys. Do not forward or proxy port 2020 off
-  the device.
+- `GetSettingsAll` returns the whole config, and `GetSettings` /
+  `GetSetting` return any section or key on request; all three expose each
+  AirPods' `irk` and `enc` keys. Do not forward or proxy port 2020 off the
+  device.
 - `config.toml` holds those keys. It is written to a temporary file and
   renamed into place with mode `0600`; a new config directory is created
   `0700`.
 
-## 4. Verify on the device
+## 5. Verify on the device
 
 Run these as the desktop user, with the headphones connected:
 
@@ -143,7 +167,7 @@ echo "$XDG_RUNTIME_DIR"; id -u
 
 # Service, listener and config
 systemctl --user status magicpodscore --no-pager
-ss -ltn 'sport = :2020'                  # expect 127.0.0.1:2020 and [::1]:2020, nothing else
+ss -ltn 'sport = :2020'     # expect 127.0.0.1:2020 and, with IPv6, [::1]:2020; never 0.0.0.0 or [::]
 stat -c '%a %n' ~/.config/magicpods ~/.config/magicpods/config.toml   # expect 700 and 600
 ```
 
@@ -152,6 +176,7 @@ Then connect a WebSocket client to `ws://127.0.0.1:2020/`. It receives an
 `battery`, `anc` and `earDetectionState` capabilities appear. Take one earbud
 out and check that `earDetectionState` changes.
 
-If `Modalias` is missing or not `bluetooth:v004C...`, the headphones are
-treated as a generic headset with battery only (no noise control or ear
-detection).
+If `Modalias` is missing, is not `bluetooth:v004Cp...`, or names a product id
+MagicPodsCore does not know, the headphones are treated as a generic headset
+(battery only, and only if they expose the Handsfree profile); otherwise they
+do not appear in `GetDevices`.
