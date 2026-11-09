@@ -91,7 +91,6 @@ jobs:
             patchelf \
             xz-utils \
             zlib1g-dev \
-            bluez \
             libbluetooth-dev \
             libpulse-dev \
             libssl-dev \
@@ -181,6 +180,7 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           RUN_ID: ${{ github.run_id }}
         run: |
+          set -f   # the flags are word-split below; never glob them
           rm -rf dist
           mkdir -p dist/lib
           cp build/magicpodscore dist/magicpodscore
@@ -288,6 +288,8 @@ jobs:
         continue-on-error: true
         run: |
           unset LD_LIBRARY_PATH
+          export HOME="${RUNNER_TEMP}/home"
+          mkdir -p "${HOME}"
           set +e
           timeout 5 ./dist/magicpodscore 2>&1
           rc=$?
