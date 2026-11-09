@@ -5,11 +5,16 @@ name: Build linux-arm64
 # (glibc 2.35 baseline), a private minimal FFmpeg 4.4.8 under /opt/ffmpeg,
 # and a patched RUNPATH so the binary finds its two FFmpeg libs in ./lib.
 #
-# Produces an artifact only. There is deliberately no release step.
+# Branch pushes produce an artifact only. Pushing a tag named like
+# 2.0.12-frame.1 also creates a DRAFT GitHub release with the tarball, its
+# sha256 and a corresponding-source tarball; a person reviews and publishes it.
 
 on:
   workflow_dispatch:
   push:
+    tags:
+      # Path filters below do not apply to tag pushes.
+      - '*-frame.*'
     branches:
       - '**'
     paths:
@@ -332,6 +337,41 @@ jobs:
           cat "out/${DIST_NAME}.tar.gz.sha256"
           tar -tzvf "out/${DIST_NAME}.tar.gz"
 
+      # Tags only: everything needed to rebuild this binary, for the GPL (and the
+      # LGPL for FFmpeg): this commit, the dependency sources CMake fetched, and
+      # the FFmpeg release tarball.
+      - name: Corresponding source (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          name="${DIST_NAME}-source"
+          root="${RUNNER_TEMP}/${name}"
+          rm -rf "${root}"
+          mkdir -p "${root}/deps"
+          git archive --format=tar --prefix="magicpodscore/" HEAD | tar -x -C "${root}"
+          for d in build/_deps/*-src; do
+            tar -C build/_deps --exclude=.git -cf - "$(basename "${d}")" | tar -x -C "${root}/deps"
+          done
+          curl -fsSL "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz"             -o "${root}/ffmpeg-${FFMPEG_VERSION}.tar.xz"
+          echo "${FFMPEG_SHA256}  ${root}/ffmpeg-${FFMPEG_VERSION}.tar.xz" | sha256sum -c -
+          cp dist/SOURCE.txt "${root}/SOURCE.txt"
+          ls "${root}" "${root}/deps"
+          tar --sort=name --owner=0 --group=0 --numeric-owner               -C "${RUNNER_TEMP}" -czf "out/${name}.tar.gz" "${name}"
+          (cd out && sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256")
+          ls -l out
+
+      - name: Upload source artifact (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: magicpodscore-linux-arm64-source
+          path: |
+            out/magicpodscore-linux-arm64-source.tar.gz
+            out/magicpodscore-linux-arm64-source.tar.gz.sha256
+          retention-days: 7
+          if-no-files-found: error
+
       - name: Upload artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -341,3 +381,53 @@ jobs:
             out/magicpodscore-linux-arm64.tar.gz.sha256
           retention-days: 30
           if-no-files-found: error
+
+  # Tags only. Creates a DRAFT release; nothing is public until a person
+  # publishes it. Fails if a release for this tag already exists.
+  release:
+    name: Draft release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: magicpodscore-linux-arm64
+          path: out
+
+      - name: Download source
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: magicpodscore-linux-arm64-source
+          path: out
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          SERVER_URL: ${{ github.server_url }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          cd out
+          sha256sum -c "${DIST_NAME}.tar.gz.sha256" "${DIST_NAME}-source.tar.gz.sha256"
+          bin_sha="$(cut -d' ' -f1 "${DIST_NAME}.tar.gz.sha256")"
+          {
+            echo "Unofficial linux-arm64 build of MagicPodsCore for ARM64 SteamOS devices,"
+            echo "from commit ${SHA} (built by ${SERVER_URL}/${REPO}/actions/runs/${RUN_ID})."
+            echo
+            echo "- \`${DIST_NAME}.tar.gz\`: binary, bundled FFmpeg libs (AAC decoder only), licences, SOURCE.txt"
+            echo "  sha256 \`${bin_sha}\`"
+            echo "- \`${DIST_NAME}-source.tar.gz\`: corresponding source (this commit, the dependency"
+            echo "  sources CMake fetched, and the FFmpeg release tarball)"
+            echo
+            echo "Install and run: docs/FRAME.md in this commit."
+            echo "License: GPL-3.0 (MagicPodsCore), LGPL-2.1-or-later (bundled FFmpeg libraries)."
+          } > notes.md
+          cat notes.md
+          gh release create "${TAG}" --repo "${REPO}" --draft --verify-tag             --title "${TAG} (linux-arm64)" --notes-file notes.md             "${DIST_NAME}.tar.gz" "${DIST_NAME}.tar.gz.sha256"             "${DIST_NAME}-source.tar.gz" "${DIST_NAME}-source.tar.gz.sha256"
