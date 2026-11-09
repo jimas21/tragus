@@ -6,11 +6,13 @@ All messages are sent as text WebSocket frames in JSON format.
 
 ## Connection
 
-Connect to the WebSocket at the following address:
+Connect to the WebSocket at the following address. The server listens on the loopback interface only, so it is reachable from the same machine but not from the network:
 
 ```
-ws://172.0.1.0:2020/
+ws://127.0.0.1:2020/
 ```
+
+The IPv6 loopback `ws://[::1]:2020/` is served as well when the system has IPv6, so `ws://localhost:2020/` works either way.
 
 After connecting to the WebSocket, MagicPodsCore sends an `init` message and then starts sending notifications about changes in `info`, `headphone`, and `defaultbluetooth` states.
 

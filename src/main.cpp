@@ -23,6 +23,8 @@ using namespace MagicPodsCore;
 
 //Do not forget to change version when API changes
 constexpr int API_VERSION = 1;
+constexpr const char* WEBSOCKET_HOST = "127.0.0.1";
+constexpr const char* WEBSOCKET_HOST_IPV6 = "::1";
 constexpr int WEBSOCKET_PORT = 2020;
 
 nlohmann::json MakeGetDeviceResponse(DevicesInfoFetcher& devicesInfoFetcher) {
@@ -485,9 +487,9 @@ int main(int argc, char** argv) {
             /* You may access ws->getUserData() here */
             Logger::Info("On open websocket closed");
         }
-    }).listen(WEBSOCKET_PORT, LIBUS_LISTEN_EXCLUSIVE_PORT, [&](auto *listen_socket) {
+    }).listen(WEBSOCKET_HOST, WEBSOCKET_PORT, LIBUS_LISTEN_EXCLUSIVE_PORT, [&](auto *listen_socket) {
         if (listen_socket) {
-            Logger::Info("Listening on port %d", WEBSOCKET_PORT);
+            Logger::Info("Listening on %s:%d", WEBSOCKET_HOST, WEBSOCKET_PORT);
 
             Logger::Info("Starting initialization...");
 
@@ -504,8 +506,15 @@ int main(int argc, char** argv) {
             Logger::Info("Initialization complete, ready to accept connections");
             initialized.store(true);
         } else {
-            Logger::Error("Failed to listen on port %d", WEBSOCKET_PORT);
+            Logger::Error("Failed to listen on %s:%d", WEBSOCKET_HOST, WEBSOCKET_PORT);
             exit(1);
+        }
+    }).listen(WEBSOCKET_HOST_IPV6, WEBSOCKET_PORT, LIBUS_LISTEN_EXCLUSIVE_PORT, [](auto *listen_socket) {
+        /* Also serve the IPv6 loopback, so clients that resolve localhost to ::1 connect directly. Optional. */
+        if (listen_socket) {
+            Logger::Info("Listening on [%s]:%d", WEBSOCKET_HOST_IPV6, WEBSOCKET_PORT);
+        } else {
+            Logger::Info("IPv6 loopback [%s]:%d not available, serving IPv4 loopback only", WEBSOCKET_HOST_IPV6, WEBSOCKET_PORT);
         }
     }).run();
 }
