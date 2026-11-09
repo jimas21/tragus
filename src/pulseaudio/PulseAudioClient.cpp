@@ -103,6 +103,7 @@ namespace MagicPodsCore
         pa_context_connect(ctx, nullptr, PA_CONTEXT_NOAUTOSPAWN, nullptr);
         if (!WaitReady())
         {
+            Logger::Warn("PulseAudio server not reachable; audio features are off until restart");
             Free();
             return;
         }
@@ -688,13 +689,17 @@ namespace MagicPodsCore
 
     bool PulseAudioClient::WaitReady(std::chrono::milliseconds timeout)
     {
-        const auto start = std::chrono::steady_clock::now();
+        // Check the state before waiting and never block without a bound: when the connection
+        // fails at once (no server running), no further event arrives, so a blocking iterate
+        // would never return and startup would hang.
+        const auto deadline = std::chrono::steady_clock::now() + timeout;
         while (true) {
-            pa_mainloop_iterate(ml, 1, nullptr);
             const auto st = pa_context_get_state(ctx);
             if (st == PA_CONTEXT_READY) return true;
             if (st == PA_CONTEXT_FAILED || st == PA_CONTEXT_TERMINATED) return false;
-            if (std::chrono::steady_clock::now() - start > timeout) return false;
+            if (std::chrono::steady_clock::now() >= deadline) return false;
+            if (pa_mainloop_iterate(ml, 0, nullptr) < 0) return false;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
     void PulseAudioClient::StopLoop()
