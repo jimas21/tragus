@@ -291,6 +291,7 @@ jobs:
         run: |
           unset LD_LIBRARY_PATH
           export HOME="${RUNNER_TEMP}/home"
+          export XDG_CONFIG_HOME="${HOME}/.config"   # the runner sets its own
           mkdir -p "${HOME}"
           set +e
           ./dist/magicpodscore > "${RUNNER_TEMP}/smoke.log" 2>&1 &
@@ -305,8 +306,13 @@ jobs:
           echo "--- listeners on port 2020"
           ss -ltn 'sport = :2020'
           echo "--- config directory"
-          ls -la "${HOME}/.config/magicpods"
-          stat -c '%a %n' "${HOME}/.config/magicpods" "${HOME}/.config/magicpods/config.toml"
+          ls -la "${XDG_CONFIG_HOME}/magicpods"
+          stat -c '%a %n' "${XDG_CONFIG_HOME}/magicpods" "${XDG_CONFIG_HOME}/magicpods/config.toml"
+          if kill -0 "${pid}" 2>/dev/null && ! grep -q 'Initialization complete' "${RUNNER_TEMP}/smoke.log"; then
+            echo "--- initialization did not finish; thread stacks"
+            sudo apt-get install -y -qq gdb > /dev/null 2>&1
+            sudo gdb -p "${pid}" -batch -ex 'thread apply all bt 12' 2>/dev/null | grep -E '^Thread|^#'
+          fi
           kill "${pid}" 2>/dev/null
           wait "${pid}"
           echo "exit code: $? (143 = still running and stopped by the test, which is fine)"
