@@ -405,6 +405,43 @@ jobs:
           name: magicpodscore-linux-arm64-source
           path: out
 
+      # ed25519 signature over the exact tarball bytes, for clients that install
+      # updates automatically. The seed is the MP_RELEASE_KEY secret (a '#' comment
+      # line, then base64 of the 32-byte seed); the matching public key is pinned
+      # here and checked, so a wrong or rotated secret fails the job.
+      - name: Sign the tarball
+        env:
+          MP_RELEASE_KEY: ${{ secrets.MP_RELEASE_KEY }}
+          MP_RELEASE_PUBKEY: 'GOT1qW3jXgAMmr3pyoQece9CnIIrNlgiZysjnNC/Hdk='
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/sign"
+          "${RUNNER_TEMP}/sign/bin/pip" install --quiet 'cryptography==44.0.0'
+          "${RUNNER_TEMP}/sign/bin/python" - "out/${DIST_NAME}.tar.gz" <<'PY'
+          import base64, os, sys
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+          from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+          lines = [l.strip() for l in os.environ.get("MP_RELEASE_KEY", "").splitlines()]
+          lines = [l for l in lines if l and not l.startswith("#")]
+          if len(lines) != 1:
+              sys.exit("MP_RELEASE_KEY: expected one base64 seed line after the comment")
+          seed = base64.b64decode(lines[0], validate=True)
+          if len(seed) != 32:
+              sys.exit("MP_RELEASE_KEY: seed is not 32 bytes")
+          key = Ed25519PrivateKey.from_private_bytes(seed)
+          pub = key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+          if base64.b64encode(pub).decode() != os.environ["MP_RELEASE_PUBKEY"]:
+              sys.exit("MP_RELEASE_KEY does not match the pinned public key")
+          path = sys.argv[1]
+          data = open(path, "rb").read()
+          sig = key.sign(data)
+          Ed25519PublicKey.from_public_bytes(base64.b64decode(os.environ["MP_RELEASE_PUBKEY"])).verify(sig, data)
+          with open(path + ".sig", "w") as out:
+              out.write(base64.b64encode(sig).decode())
+              out.write(chr(10))
+          print("signed", path, "and verified with the pinned public key")
+          PY
+          cat "out/${DIST_NAME}.tar.gz.sig"
+
       - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -422,7 +459,7 @@ jobs:
             echo "from commit ${SHA} (built by ${SERVER_URL}/${REPO}/actions/runs/${RUN_ID})."
             echo
             echo "- \`${DIST_NAME}.tar.gz\`: binary, bundled FFmpeg libs (AAC decoder only), licences, SOURCE.txt"
-            echo "  sha256 \`${bin_sha}\`"
+            echo "  sha256 \`${bin_sha}\`; ed25519 signature in \`${DIST_NAME}.tar.gz.sig\`"
             echo "- \`${DIST_NAME}-source.tar.gz\`: corresponding source (this commit, the dependency"
             echo "  sources CMake fetched, and the FFmpeg release tarball)"
             echo
@@ -430,4 +467,4 @@ jobs:
             echo "License: GPL-3.0 (MagicPodsCore), LGPL-2.1-or-later (bundled FFmpeg libraries)."
           } > notes.md
           cat notes.md
-          gh release create "${TAG}" --repo "${REPO}" --draft --verify-tag             --title "${TAG} (linux-arm64)" --notes-file notes.md             "${DIST_NAME}.tar.gz" "${DIST_NAME}.tar.gz.sha256"             "${DIST_NAME}-source.tar.gz" "${DIST_NAME}-source.tar.gz.sha256"
+          gh release create "${TAG}" --repo "${REPO}" --draft --verify-tag             --title "${TAG} (linux-arm64)" --notes-file notes.md             "${DIST_NAME}.tar.gz" "${DIST_NAME}.tar.gz.sha256" "${DIST_NAME}.tar.gz.sig"             "${DIST_NAME}-source.tar.gz" "${DIST_NAME}-source.tar.gz.sha256"
