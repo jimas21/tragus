@@ -1,0 +1,316 @@
+name: Build linux-arm64
+
+# Native ARM64 build of MagicPodsCore on GitHub's free arm runner (public repos),
+# without Docker. It mirrors MagicPodsDecky/backend/Dockerfile: ubuntu 22.04
+# (glibc 2.35 baseline), a private minimal FFmpeg 4.4.8 under /opt/ffmpeg,
+# and a patched RUNPATH so the binary finds its two FFmpeg libs in ./lib.
+#
+# Produces an artifact only. There is deliberately no release step.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'src/**'
+      - 'dependencies/**'
+      - 'config/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build-arm64.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    # bash with -eo pipefail
+    shell: bash
+
+env:
+  FFMPEG_VERSION: '4.4.8'
+  FFMPEG_SHA256: 'c73848c4ae283d9eaee7be3b276affbc3543380483555500d0dd2c9b7e1c39c3'
+  FFMPEG_PREFIX: /opt/ffmpeg
+  # Same flags as the Dockerfile (minus --prefix, which is FFMPEG_PREFIX above).
+  # One flag per line; the cache key is a hash of this text.
+  FFMPEG_CONFIGURE_FLAGS: |
+    --disable-everything
+    --disable-autodetect
+    --disable-programs
+    --disable-doc
+    --disable-debug
+    --disable-static
+    --enable-shared
+    --enable-small
+    --enable-decoder=aac
+    --disable-avdevice
+    --disable-avfilter
+    --disable-avformat
+    --disable-network
+    --disable-postproc
+    --disable-swresample
+    --disable-swscale
+  DIST_NAME: magicpodscore-linux-arm64
+
+jobs:
+  build:
+    name: magicpodscore (linux-arm64, glibc 2.35)
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Package list is the Dockerfile's, minus nasm (x86 only), doxygen and graphviz
+      # (CMakeLists.txt does not use them; sdbus-c++ v1.6.0 only runs doxygen when
+      # BUILD_DOXYGEN_DOC is on, and that defaults to OFF). `file` is added for the
+      # verify step. git is needed because uSockets/uWebSockets are fetched by
+      # CMake FetchContent at configure time (dependencies/ is NOT vendored).
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            gcc \
+            g++ \
+            make \
+            pkg-config \
+            ca-certificates \
+            curl \
+            libsystemd-dev \
+            git \
+            patchelf \
+            xz-utils \
+            zlib1g-dev \
+            bluez \
+            libbluetooth-dev \
+            libpulse-dev \
+            libssl-dev \
+            file
+          echo "--- toolchain"
+          uname -m
+          ldd --version | head -n1
+          gcc --version | head -n1
+          cmake --version | head -n1
+          patchelf --version
+
+      - name: Compute FFmpeg cache key
+        id: ffkey
+        run: |
+          flags_hash="$(printf '%s\n%s\n' "--prefix=${FFMPEG_PREFIX}" "${FFMPEG_CONFIGURE_FLAGS}" | sha256sum | cut -c1-16)"
+          echo "flags_hash=${flags_hash}"
+          echo "hash=${flags_hash}" >> "$GITHUB_OUTPUT"
+
+      # The prefix is under /opt, so make it writable for the runner user before
+      # actions/cache restores into it and before make install writes to it.
+      - name: Prepare FFmpeg prefix
+        run: |
+          sudo mkdir -p "${FFMPEG_PREFIX}"
+          sudo chown "$(id -u):$(id -g)" "${FFMPEG_PREFIX}"
+
+      # restore + save are split so FFmpeg is cached as soon as it is built,
+      # even if a later step (cmake, verify) fails and the job ends red.
+      - name: Restore FFmpeg cache
+        id: ffcache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /opt/ffmpeg
+          key: ffmpeg-${{ env.FFMPEG_VERSION }}-${{ steps.ffkey.outputs.hash }}-${{ runner.os }}-${{ runner.arch }}-ubuntu2204-v1
+
+      - name: Build FFmpeg ${{ env.FFMPEG_VERSION }}
+        if: steps.ffcache.outputs.cache-hit != 'true'
+        run: |
+          set -f   # the flags are word-split below; never glob them
+          src="${RUNNER_TEMP}/ffmpeg-src"
+          mkdir -p "${src}"
+          curl -fsSL "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz" \
+            -o "${RUNNER_TEMP}/ffmpeg.tar.xz"
+          echo "${FFMPEG_SHA256}  ${RUNNER_TEMP}/ffmpeg.tar.xz" | sha256sum -c -
+          tar -xJf "${RUNNER_TEMP}/ffmpeg.tar.xz" -C "${src}" --strip-components=1
+          cd "${src}"
+          # shellcheck disable=SC2086
+          ./configure --prefix="${FFMPEG_PREFIX}" ${FFMPEG_CONFIGURE_FLAGS}
+          make -j"$(nproc)"
+          make install
+          find "${FFMPEG_PREFIX}/lib" -type f \
+            \( -name 'libavcodec.so.*' -o -name 'libavutil.so.*' \) \
+            -exec strip --strip-unneeded {} +
+          # LGPL text to ship next to the bundled libraries (not in the Dockerfile).
+          cp COPYING.LGPLv2.1 "${FFMPEG_PREFIX}/COPYING.LGPLv2.1"
+
+      - name: Check FFmpeg libraries
+        run: |
+          for f in lib/libavcodec.so.58 lib/libavutil.so.56 lib/pkgconfig/libavcodec.pc lib/pkgconfig/libavutil.pc COPYING.LGPLv2.1; do
+            test -e "${FFMPEG_PREFIX}/${f}" || { echo "::error::missing ${FFMPEG_PREFIX}/${f}"; exit 1; }
+          done
+          ls -l "${FFMPEG_PREFIX}/lib" | grep -E 'libav(codec|util)\.so'
+
+      - name: Save FFmpeg cache
+        if: steps.ffcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /opt/ffmpeg
+          key: ffmpeg-${{ env.FFMPEG_VERSION }}-${{ steps.ffkey.outputs.hash }}-${{ runner.os }}-${{ runner.arch }}-ubuntu2204-v1
+
+      - name: Configure
+        run: |
+          export PKG_CONFIG_PATH="${FFMPEG_PREFIX}/lib/pkgconfig"
+          export LD_LIBRARY_PATH="${FFMPEG_PREFIX}/lib"
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          export PKG_CONFIG_PATH="${FFMPEG_PREFIX}/lib/pkgconfig"
+          export LD_LIBRARY_PATH="${FFMPEG_PREFIX}/lib"
+          cmake --build build --parallel "$(nproc)"
+
+      - name: Assemble dist/
+        env:
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          rm -rf dist
+          mkdir -p dist/lib
+          cp build/magicpodscore dist/magicpodscore
+          cp -L "${FFMPEG_PREFIX}/lib/libavcodec.so.58" dist/lib/
+          cp -L "${FFMPEG_PREFIX}/lib/libavutil.so.56" dist/lib/
+          # Single quotes: the literal text $ORIGIN/lib must reach patchelf.
+          patchelf --set-rpath '$ORIGIN/lib' dist/magicpodscore
+          cp LICENSE dist/LICENSE
+          cp "${FFMPEG_PREFIX}/COPYING.LGPLv2.1" dist/lib/FFMPEG-COPYING.LGPLv2.1
+
+          version="$(sed -n 's/^project(magicpodscore VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+          {
+            echo "MagicPodsCore ${version} (linux-arm64 build)"
+            echo
+            echo "This program is licensed under the GNU GPL v3 (see LICENSE)."
+            echo "Corresponding source code for this exact build:"
+            echo "  repository: ${SERVER_URL}/${REPOSITORY}"
+            echo "  commit:     ${COMMIT_SHA}"
+            echo "  tree:       ${SERVER_URL}/${REPOSITORY}/tree/${COMMIT_SHA}"
+            echo "  built by:   ${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID} (ref ${REF_NAME})"
+            echo "Upstream project: https://github.com/steam3d/MagicPodsCore"
+            echo "Build recipe: .github/workflows/build-arm64.yml in that commit."
+            echo
+            echo "Bundled in lib/ (dynamically linked, replaceable):"
+            echo "  libavcodec.so.58, libavutil.so.56 from FFmpeg ${FFMPEG_VERSION}"
+            echo "  source:  https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz"
+            echo "  sha256:  ${FFMPEG_SHA256}"
+            echo "  license: LGPL v2.1 or later (configured without --enable-gpl); text in lib/FFMPEG-COPYING.LGPLv2.1"
+            echo "  configure flags: --prefix=${FFMPEG_PREFIX}"
+            printf '    %s\n' ${FFMPEG_CONFIGURE_FLAGS}
+            echo
+            echo "Statically linked from sources fetched by CMake at build time"
+            echo "(see dependencies/*/CMakeLists.txt in the commit above for exact versions):"
+            echo "  sdbus-c++, uSockets, uWebSockets, nlohmann/json, toml++"
+          } > dist/SOURCE.txt
+          cat dist/SOURCE.txt
+          ls -lR dist
+
+      - name: Verify dist/
+        run: |
+          set -u
+          fail() { echo "::error::verify failed: $*"; exit 1; }
+          # The loader must find the FFmpeg libs through RUNPATH alone.
+          unset LD_LIBRARY_PATH
+          bin=dist/magicpodscore
+
+          echo "--- file"
+          desc="$(file -b "${bin}")"
+          echo "${desc}"
+          [[ "${desc}" == *"ELF 64-bit"* && "${desc}" == *"ARM aarch64"* ]] || fail "binary is not ELF ARM aarch64"
+          for lib in dist/lib/libavcodec.so.58 dist/lib/libavutil.so.56; do
+            d="$(file -b "${lib}")"
+            [[ "${d}" == *"ARM aarch64"* ]] || fail "${lib} is not ARM aarch64: ${d}"
+          done
+
+          echo "--- dynamic section (RPATH/RUNPATH)"
+          dyn="$(readelf -d "${bin}")"
+          rp="$(grep -E '\((RPATH|RUNPATH)\)' <<<"${dyn}" || true)"
+          echo "${rp}"
+          [[ -n "${rp}" ]] || fail "no RPATH/RUNPATH entry"
+          # Exactly this value, so no stray /opt/ffmpeg path survives.
+          [[ "$(wc -l <<<"${rp}")" -eq 1 && "${rp}" == *'[$ORIGIN/lib]' ]] || fail 'RUNPATH/RPATH is not exactly $ORIGIN/lib'
+
+          echo "--- NEEDED"
+          grep -E '\(NEEDED\)' <<<"${dyn}"
+
+          echo "--- ldd"
+          ddd="$(ldd "${bin}")"
+          echo "${ddd}"
+          if grep -q 'not found' <<<"${ddd}"; then fail "unresolved shared library (see ldd above)"; fi
+          for lib in libavcodec.so.58 libavutil.so.56; do
+            line="$(grep -F "${lib} =>" <<<"${ddd}")" || fail "${lib} not listed by ldd"
+            resolved="$(awk '{print $3}' <<<"${line}")"
+            [[ "$(readlink -f "${resolved}")" == "$(readlink -f "dist/lib/${lib}")" ]] \
+              || fail "${lib} resolved to ${resolved}, expected dist/lib/${lib}"
+          done
+
+          echo "--- highest glibc symbol version required"
+          maxver() {  # $1 = prefix (GLIBC or GLIBCXX), rest = files
+            local p="$1"; shift
+            { objdump -T "$@" 2>/dev/null | grep -o "${p}_[0-9][0-9.]*" || true; } | sed "s/^${p}_//" | sort -uV | tail -n1
+          }
+          glibc_max="$(maxver GLIBC "${bin}" dist/lib/libavcodec.so.58 dist/lib/libavutil.so.56)"
+          echo "GLIBC_${glibc_max} (binary + bundled libs)"
+          echo "GLIBC_$(maxver GLIBC "${bin}") (binary alone)"
+          echo "GLIBCXX_$(maxver GLIBCXX "${bin}") (binary alone, libstdc++ must provide it)"
+          [[ -n "${glibc_max}" ]] || fail "could not determine the GLIBC version"
+          [[ "$(printf '%s\n' "${glibc_max}" 2.35 | sort -V | tail -n1)" == "2.35" ]] \
+            || fail "requires glibc ${glibc_max}, above the 2.35 baseline"
+
+          {
+            echo "### magicpodscore linux-arm64"
+            echo "- file: ${desc}"
+            echo "- highest GLIBC required: ${glibc_max}"
+            echo '- needed libraries:'
+            echo '```'
+            grep -E '\(NEEDED\)' <<<"${dyn}"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      # Informational only. It will usually fail on a CI runner (no BlueZ/D-Bus
+      # services, no Bluetooth adapter); what matters is that it starts and the
+      # loader does not complain about missing libraries.
+      - name: Smoke run (non-fatal)
+        continue-on-error: true
+        run: |
+          unset LD_LIBRARY_PATH
+          set +e
+          timeout 5 ./dist/magicpodscore 2>&1
+          rc=$?
+          echo "exit code: ${rc} (124 = still running after 5 s, which is fine)"
+          exit 0
+
+      - name: Package
+        run: |
+          mkdir -p out
+          tar --sort=name --owner=0 --group=0 --numeric-owner \
+              --transform "s,^dist,${DIST_NAME}," \
+              -czf "out/${DIST_NAME}.tar.gz" dist
+          (cd out && sha256sum "${DIST_NAME}.tar.gz" > "${DIST_NAME}.tar.gz.sha256")
+          ls -l out
+          cat "out/${DIST_NAME}.tar.gz.sha256"
+          tar -tzvf "out/${DIST_NAME}.tar.gz"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: magicpodscore-linux-arm64
+          path: |
+            out/magicpodscore-linux-arm64.tar.gz
+            out/magicpodscore-linux-arm64.tar.gz.sha256
+          retention-days: 30
+          if-no-files-found: error
