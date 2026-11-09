@@ -32,17 +32,57 @@ void SettingsService::LoadFromFile() {
 }
 
 void SettingsService::WriteToFile() {
-    std::filesystem::create_directories(std::filesystem::path(_filePath).parent_path());
-
-    std::ofstream file(_filePath);
-    if (!file.is_open()) {
-        throw std::runtime_error("Failed to open file for writing: " + _filePath);
+    const std::filesystem::path path(_filePath);
+    const std::filesystem::path dir = path.parent_path();
+    if (std::filesystem::create_directories(dir)) {
+        // A newly created config directory is private: the file holds device keys.
+        std::filesystem::permissions(dir, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace);
     }
 
-    file << _settings;
+    std::ostringstream out;
+    out << _settings;
+    const std::string data = out.str();
 
-    if (!file.good()) {
-        throw std::runtime_error("Failed to write to file: " + _filePath);
+    // Write a private temporary file beside the config, then rename it over the config.
+    // mkstemp creates the file with mode 0600, so the keys are never readable by other users,
+    // and the rename means a crash leaves either the old or the new file, never a truncated one.
+    std::string tmpPath = _filePath + ".XXXXXX";
+    const int fd = mkstemp(tmpPath.data());
+    if (fd < 0) {
+        throw std::runtime_error("Failed to open file for writing: " + _filePath + ": " + std::strerror(errno));
+    }
+
+    bool ok = true;
+    int error = 0;
+    const char* cursor = data.data();
+    size_t left = data.size();
+    while (left > 0) {
+        const ssize_t written = write(fd, cursor, left);
+        if (written < 0) {
+            if (errno == EINTR)
+                continue;
+            ok = false;
+            error = errno;
+            break;
+        }
+        cursor += written;
+        left -= static_cast<size_t>(written);
+    }
+    if (ok && fsync(fd) != 0) {
+        ok = false;
+        error = errno;
+    }
+    if (close(fd) != 0 && ok) {
+        ok = false;
+        error = errno;
+    }
+    if (ok && rename(tmpPath.c_str(), _filePath.c_str()) != 0) {
+        ok = false;
+        error = errno;
+    }
+    if (!ok) {
+        unlink(tmpPath.c_str());
+        throw std::runtime_error("Failed to write to file: " + _filePath + ": " + std::strerror(error));
     }
 }
 
