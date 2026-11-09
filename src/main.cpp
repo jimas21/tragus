@@ -487,24 +487,9 @@ int main(int argc, char** argv) {
             /* You may access ws->getUserData() here */
             Logger::Info("On open websocket closed");
         }
-    }).listen(WEBSOCKET_HOST, WEBSOCKET_PORT, LIBUS_LISTEN_EXCLUSIVE_PORT, [&](auto *listen_socket) {
+    }).listen(WEBSOCKET_HOST, WEBSOCKET_PORT, LIBUS_LISTEN_EXCLUSIVE_PORT, [](auto *listen_socket) {
         if (listen_socket) {
             Logger::Info("Listening on %s:%d", WEBSOCKET_HOST, WEBSOCKET_PORT);
-
-            Logger::Info("Starting initialization...");
-
-            #ifdef DEBUG
-            TestsSgb sgb;
-            TestsPbp pbp;
-            TestsAapBle aapBle;
-            #endif
-
-            devicesInfoFetcher = std::make_unique<DevicesInfoFetcher>(settingsService);
-
-            SubscribeAndHandleBroadcastEvents(app, *devicesInfoFetcher, *settingsService);
-
-            Logger::Info("Initialization complete, ready to accept connections");
-            initialized.store(true);
         } else {
             Logger::Error("Failed to listen on %s:%d", WEBSOCKET_HOST, WEBSOCKET_PORT);
             exit(1);
@@ -516,5 +501,24 @@ int main(int argc, char** argv) {
         } else {
             Logger::Info("IPv6 loopback [%s]:%d not available, serving IPv4 loopback only", WEBSOCKET_HOST_IPV6, WEBSOCKET_PORT);
         }
-    }).run();
+    });
+
+    /* Initialize after both listeners are bound and before the event loop runs (as before),
+     * so no connection is served until initialization is complete. */
+    Logger::Info("Starting initialization...");
+
+    #ifdef DEBUG
+    TestsSgb sgb;
+    TestsPbp pbp;
+    TestsAapBle aapBle;
+    #endif
+
+    devicesInfoFetcher = std::make_unique<DevicesInfoFetcher>(settingsService);
+
+    SubscribeAndHandleBroadcastEvents(app, *devicesInfoFetcher, *settingsService);
+
+    Logger::Info("Initialization complete, ready to accept connections");
+    initialized.store(true);
+
+    app.run();
 }
