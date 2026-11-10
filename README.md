@@ -31,7 +31,9 @@ On the Steam Frame:
 4. Restart the headset once. The earbuds battery then shows in the bottom bar, next to
    the headset battery.
 
-**Update:** run the installer again; your settings are kept.
+**Updates:** MagicPods keeps itself up to date. In the MagicPods menu, **Settings ›
+Updates** has **Check for updates** and an **Update automatically** switch (on by
+default). Your settings are kept.
 **Remove:** open
 [`Uninstall-MagicPods.desktop`](https://github.com/jimas21/MagicPodsCore/releases/latest/download/Uninstall-MagicPods.desktop)
 the same way.

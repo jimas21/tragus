@@ -209,7 +209,9 @@ jobs:
           cp LICENSE dist/LICENSE
           # Installer for ARM64 SteamOS headsets (systemd --user service).
           cp frame/install.sh frame/uninstall.sh frame/magicpodscore.service dist/
-          chmod 755 dist/install.sh dist/uninstall.sh
+          # The updater the MagicPods menu runs ("Check for updates", automatic updates).
+          cp frame/magicpods-frame-install.py dist/
+          chmod 755 dist/install.sh dist/uninstall.sh dist/magicpods-frame-install.py
           chmod 644 dist/magicpodscore.service
           cp "${FFMPEG_PREFIX}/COPYING.LGPLv2.1" dist/lib/FFMPEG-COPYING.LGPLv2.1
 

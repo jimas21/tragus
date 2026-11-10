@@ -19,7 +19,7 @@ rm -rf "$dest.new"
 mkdir -p "$dest.new/lib"
 cp -f "$src/magicpodscore" "$dest.new/"
 cp -f "$src/lib/"* "$dest.new/lib/"
-for f in LICENSE SOURCE.txt install.sh uninstall.sh magicpodscore.service; do
+for f in LICENSE SOURCE.txt install.sh uninstall.sh magicpodscore.service magicpods-frame-install.py; do
     if [ -f "$src/$f" ]; then cp -f "$src/$f" "$dest.new/"; fi
 done
 chmod 755 "$dest.new/magicpodscore"

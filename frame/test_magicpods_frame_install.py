@@ -123,6 +123,16 @@ class ExtractTests(unittest.TestCase):
                 self.assertFalse(os.path.exists(os.path.join(self.dir, "evil")))
 
 
+class VersionTests(unittest.TestCase):
+    def test_order(self):
+        k = mpi.version_key
+        self.assertGreater(k("2.0.12-frame.10"), k("2.0.12-frame.9"))
+        self.assertGreater(k("2.0.13-frame.1"), k("2.0.12-frame.9"))
+        self.assertGreater(k("frame-menu-4"), k("frame-menu-3"))
+        self.assertGreater(k("frame-menu-1"), k(""))
+        self.assertLess(k("2.0.12-frame.6"), k("2.0.12-frame.7"))
+
+
 class CliTests(unittest.TestCase):
     def test_purge_needs_uninstall(self):
         with self.assertRaises(SystemExit):

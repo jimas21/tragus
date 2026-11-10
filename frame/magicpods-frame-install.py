@@ -11,6 +11,8 @@ Usually started by Install-MagicPods.desktop (Desktop Mode), or by hand:
   python3 magicpods-frame-install.py              install or update both
   python3 magicpods-frame-install.py --uninstall  remove both (settings kept)
   python3 magicpods-frame-install.py --uninstall --purge   also delete the settings
+The MagicPods menu runs the copy kept in ~/.local/share/magicpodscore/ with --if-newer
+--status-file for its "Check for updates" button and automatic updates.
 
 Python standard library only. Licence: GPL-3.0, like MagicPodsCore.
 """
@@ -19,13 +21,16 @@ import argparse
 import http.client
 import base64
 import hashlib
+import json
 import os
 import platform
 import shutil
+import signal
 import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.request
 
 USER_AGENT = "magicpods-frame-install"
@@ -218,9 +223,67 @@ def safe_extract(archive_path, dest, top):
     return root
 
 
-def download_component(component, workdir):
-    base = f"https://github.com/{component['repo']}/releases/latest/download/{component['asset']}"
-    print(f"Downloading {component['name']} ...", flush=True)
+VERSIONS_FILE = os.path.expanduser("~/.local/share/magicpods-app/versions.json")
+_TAG_OK = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_")
+
+
+def latest_tag(component):
+    """The tag of the repository's latest release (GitHub redirects /releases/latest
+    to /releases/tag/<tag>)."""
+    url = f"https://github.com/{component['repo']}/releases/latest"
+    req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            final = resp.geturl()
+    except (OSError, http.client.HTTPException) as e:
+        raise InstallError(f"could not check {url}: {e}; check the connection and try again") from None
+    marker = "/releases/tag/"
+    tag = final.split(marker, 1)[1] if marker in final else ""
+    if not tag or len(tag) > 64 or not set(tag) <= _TAG_OK:
+        raise InstallError(f"could not find the latest release of {component['repo']}")
+    return tag
+
+
+def read_versions():
+    try:
+        with open(VERSIONS_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def write_versions(versions):
+    os.makedirs(os.path.dirname(VERSIONS_FILE), exist_ok=True)
+    tmp = VERSIONS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(versions, f, indent=1, sort_keys=True)
+    os.replace(tmp, VERSIONS_FILE)
+
+
+class Status:
+    """Progress for the MagicPods menu (its helper reads the file): a JSON object with
+    state (checking, updating, uptodate, updated, failed), message and time."""
+
+    def __init__(self, path):
+        self.path = path
+
+    def set(self, state, message):
+        if not self.path:
+            return
+        try:
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
+            tmp = self.path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"state": state, "message": message, "time": int(time.time())}, f)
+            os.replace(tmp, self.path)
+        except OSError:
+            pass
+
+
+def download_component(component, workdir, tag):
+    base = f"https://github.com/{component['repo']}/releases/download/{tag}/{component['asset']}"
+    print(f"Downloading {component['name']} {tag} ...", flush=True)
     data = fetch(base)
     sig_text = fetch(base + ".sig").decode("ascii", "replace")
     check_signature(component, data, sig_text)
@@ -238,39 +301,91 @@ def clean_env():
     return env
 
 
-def install(args):
+def version_key(tag):
+    """Numbers in a tag, for ordering: 2.0.12-frame.7 -> (2, 0, 12, 7); frame-menu-3 -> (3,)."""
+    out, num = [], ""
+    for ch in tag + " ":
+        if ch.isdigit():
+            num += ch
+        elif num:
+            out.append(int(num))
+            num = ""
+    return tuple(out)
+
+
+LOCK_FILE = os.path.join(
+    os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "magicpods", "install.lock")
+
+
+def take_lock():
+    """One install at a time (the button and the menu's updater use the same script)."""
+    try:
+        import fcntl
+    except ImportError:  # not Linux (tests, --download-only on a PC)
+        return None
+    os.makedirs(os.path.dirname(LOCK_FILE), exist_ok=True)
+    f = open(LOCK_FILE, "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        raise InstallError("another MagicPods install or update is running; try again in a minute") from None
+    return f
+
+
+def install(args, status):
     if platform.machine() not in ("aarch64", "arm64") and not args.download_only:
         raise InstallError(
             f"this is for the Steam Frame (ARM64); this computer is {platform.machine()}"
         )
     if not args.download_only and shutil.which("systemctl") is None:
         raise InstallError("systemctl was not found; this installer needs SteamOS")
+    lock = None if args.download_only else take_lock()
+    status.set("checking", "Checking for updates...")
+    tags = {c["repo"]: latest_tag(c) for c in COMPONENTS}
+    installed = read_versions()
+    todo = COMPONENTS
+    if args.if_newer:
+        # Only what changed, and never an older release than the one installed.
+        todo = [c for c in COMPONENTS
+                if installed.get(c["repo"]) != tags[c["repo"]]
+                and version_key(tags[c["repo"]]) > version_key(installed.get(c["repo"]) or "")]
+        if not todo:
+            print("MagicPods is up to date.")
+            status.set("uptodate", "Up to date")
+            return
     menu_was_running = args.download_only or subprocess.run(
         ["systemctl", "--user", "is-active", "--quiet", "magicpods-steamui.service"],
         env=clean_env()).returncode == 0
     parent = args.download_only or None
     if parent:
         os.makedirs(parent, exist_ok=True)
+    status.set("updating", "Updating...")
     with tempfile.TemporaryDirectory(prefix="magicpods-install-", dir=parent) as work:
-        roots = [download_component(c, work) for c in COMPONENTS]
+        roots = [download_component(c, work, tags[c["repo"]]) for c in todo]
         if args.download_only:
-            for c, root in zip(COMPONENTS, roots):
+            for c, root in zip(todo, roots):
                 keep = os.path.join(args.download_only, c["top"])
                 shutil.rmtree(keep, ignore_errors=True)
                 shutil.move(root, keep)
                 print(f"  unpacked to {keep}")
             return
-        for c, root in zip(COMPONENTS, roots):
+        for c, root in zip(todo, roots):
             print(f"Installing {c['name']} ...", flush=True)
             r = subprocess.run(["sh", os.path.join(root, "install.sh")], env=clean_env())
             if r.returncode != 0:
                 raise InstallError(f"{c['name']} did not install (install.sh exited {r.returncode})")
+            installed[c["repo"]] = tags[c["repo"]]
+            write_versions(installed)
+    status.set("updated", "Updated: " + ", ".join(f"{c['name']} {tags[c['repo']]}" for c in todo))
+    if lock:
+        lock.close()
     print()
     print("MagicPods is installed.")
     print("- Pair your headphones in Steam Settings > Bluetooth if you have not yet.")
     if not menu_was_running:
         print("- Restart the headset once, so Steam shows the MagicPods menu.")
-    print("- To update later, run this installer again. Your settings are kept.")
+    print("- MagicPods keeps itself up to date (MagicPods menu > Settings > Updates).")
 
 
 def uninstall(args):
@@ -300,23 +415,36 @@ def main(argv=None):
                     help="with --uninstall: also delete the settings (they hold the headphones' pairing keys)")
     ap.add_argument("--download-only", metavar="DIR",
                     help="download, check and unpack the releases into DIR without installing")
+    ap.add_argument("--if-newer", action="store_true",
+                    help="only install when a newer release exists (used by the menu's updater)")
+    ap.add_argument("--status-file", metavar="PATH",
+                    help="write progress as JSON to PATH (used by the menu's updater)")
     args = ap.parse_args(argv)
     if args.purge and not args.uninstall:
         ap.error("--purge only goes with --uninstall")
+    status = Status(None if (args.uninstall or args.download_only) else args.status_file)
+
+    def on_term(signum, frame):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, on_term)
     try:
         if args.uninstall:
             uninstall(args)
         else:
-            install(args)
-    except InstallError as e:
+            install(args, status)
+    except (InstallError, OSError, tarfile.TarError) as e:
         print(f"\nerror: {e}", file=sys.stderr)
-        return 1
-    except (OSError, tarfile.TarError) as e:
-        print(f"\nerror: {e}", file=sys.stderr)
+        status.set("failed", f"Update failed: {e}")
         return 1
     except KeyboardInterrupt:
         print("\ncancelled", file=sys.stderr)
+        status.set("failed", "Update cancelled")
         return 130
+    except Exception as e:  # never leave the menu showing "Updating..."
+        print(f"\nerror: {type(e).__name__}: {e}", file=sys.stderr)
+        status.set("failed", f"Update failed: {type(e).__name__}")
+        return 1
     return 0
 
 
