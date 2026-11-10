@@ -22,6 +22,7 @@ on:
       - 'dependencies/**'
       - 'config/**'
       - 'CMakeLists.txt'
+      - 'frame/**'
       - '.github/workflows/build-arm64.yml'
 
 permissions:
@@ -194,6 +195,10 @@ jobs:
           # Single quotes: the literal text $ORIGIN/lib must reach patchelf.
           patchelf --set-rpath '$ORIGIN/lib' dist/magicpodscore
           cp LICENSE dist/LICENSE
+          # Installer for ARM64 SteamOS headsets (systemd --user service).
+          cp frame/install.sh frame/uninstall.sh frame/magicpodscore.service dist/
+          chmod 755 dist/install.sh dist/uninstall.sh
+          chmod 644 dist/magicpodscore.service
           cp "${FFMPEG_PREFIX}/COPYING.LGPLv2.1" dist/lib/FFMPEG-COPYING.LGPLv2.1
 
           version="$(sed -n 's/^project(magicpodscore VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
@@ -463,7 +468,7 @@ jobs:
             echo "- \`${DIST_NAME}-source.tar.gz\`: corresponding source (this commit, the dependency"
             echo "  sources CMake fetched, and the FFmpeg release tarball)"
             echo
-            echo "Install and run: docs/FRAME.md in this commit."
+            echo "Install: unpack, then run `./magicpodscore-linux-arm64/install.sh` (see README.md and docs/FRAME.md)."
             echo "License: GPL-3.0 (MagicPodsCore), LGPL-2.1-or-later (bundled FFmpeg libraries)."
           } > notes.md
           cat notes.md

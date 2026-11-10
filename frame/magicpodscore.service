@@ -1,0 +1,22 @@
+# MagicPodsCore as a systemd --user service (installed by install.sh).
+[Unit]
+Description=MagicPodsCore (headphone control, local WebSocket on port 2020)
+After=pipewire-pulse.socket
+Wants=pipewire-pulse.socket
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# BlueZ is on the system bus, which a user unit cannot order after; wait for it briefly.
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do busctl --system status org.bluez >/dev/null 2>&1 && exit 0; sleep 1; done; exit 0'
+ExecStart="%h/.local/share/magicpodscore/magicpodscore"
+UnsetEnvironment=LD_LIBRARY_PATH LD_PRELOAD
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+SyslogIdentifier=magicpodscore
+
+[Install]
+WantedBy=default.target

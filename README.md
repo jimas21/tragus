@@ -1,117 +1,82 @@
-# MagicPodsCore💖 for Linux
+# MagicPodsCore for Steam Frame
 
-A powerful Bluetooth backend with a simple WebSocket API for AirPods, Beats, Galaxy Buds, and Pixel Buds.
+This is a fork of [MagicPodsCore](https://github.com/steam3d/MagicPodsCore) by
+Aleksandr Maslov and Andrei Litvintsev, adapted to run on the **Steam Frame** (ARM64
+SteamOS). All credit for the headphone support goes to the original project; this fork
+only adds what the Frame needs. Licence: GPL-3.0, the same as the original.
 
-Build your own apps without dealing with complex Bluetooth protocols, or get started instantly with our ready-to-use apps below.
+MagicPodsCore is the background service that talks to your headphones over Bluetooth:
+battery levels, noise control, ear detection and the headphones' own settings. It works
+with AirPods, Beats, Galaxy Buds and Pixel Buds (see the
+[supported headphones](docs/UPSTREAM-README.md#supported-headphones)).
 
-## Applications
+On the Frame you use it through the **MagicPods menu** in Steam's VR interface, from
+[jimas21/MagicPodsLinux](https://github.com/jimas21/MagicPodsLinux): a battery
+indicator next to the headset battery, a MagicPods tab in the quick menu and low-battery
+notifications.
 
-- [MagicPods for Linux](https://github.com/steam3d/MagicPodsLinux) - Desktop application with battery monitoring, case-opening animations, noise control, and advanced headphone settings.
-- [MagicPods for Decky Loader](https://github.com/steam3d/MagicPodsDecky) - Plugin for controlling headphones directly from Steam Gaming Mode.
+## Install
 
-## Core Features
+### With frameplex
 
-- Battery levels and charging status
-- Noise control
-- Bluetooth adapter management
-- Headphone connection and disconnection
-- Bluetooth audio profiles and codecs
-- Device information and capabilities
-- WebSocket JSON API with commands and events
+In frameplex, open **Settings › Earbuds** and choose **Install earbud support**. It
+installs MagicPodsCore and the MagicPods menu and keeps them up to date. (Coming in the
+next frameplex beta.)
 
-## Advanced AirPods & Beats Features
+### Manually
 
-### Audio & Noise Control
+1. Pair your headphones in the Frame's Bluetooth settings.
+2. Open a terminal on the Frame (Konsole, in Desktop Mode).
+3. Download `magicpodscore-linux-arm64.tar.gz` from the
+   [latest release](https://github.com/jimas21/MagicPodsCore/releases/latest), then:
 
-- HD Microphone
-- Conversation Awareness
-- Personalized Volume
-- Adaptive Audio
-- Custom Equalizer
-- Noise Cancellation with One AirPod
-- Earbud Noise Control Modes
-- Off Listening Mode
+   ```sh
+   tar -xzf magicpodscore-linux-arm64.tar.gz
+   ./magicpodscore-linux-arm64/install.sh
+   ```
 
-### Controls & Gestures
+4. Install the menu the same way from
+   [jimas21/MagicPodsLinux releases](https://github.com/jimas21/MagicPodsLinux/releases/latest)
+   (`magicpods-frame-menu.tar.gz`, then `./magicpods-frame-menu/install.sh`).
+5. Restart the headset once.
 
-- Press-and-hold actions
-- Press speed and press-and-hold duration
-- Volume swipe gestures
-- Call controls
-- Digital Crown direction
-- Stem press events
+To update, repeat step 3 with the new release; your settings are kept.
+To remove: `~/.local/share/magicpodscore/uninstall.sh` (add `--purge` to also delete the
+settings, which include the headphones' pairing keys).
 
-### Device Features
+Everything runs as your normal user; nothing needs root.
 
-- Case-opening events
-- Ear detection
-- Audio output switching
-- Headphone tone volume
-- Sleep detection
-- Optimized charging
-- Hearing protection
-- Firmware information
+## What this fork changes
 
-*Feature availability depends on the headphone model and firmware.*
+- **ARM64 builds** for the Frame, made by GitHub Actions and published as signed
+  releases (`.sha256` and an ed25519 `.sig` next to each download).
+- **An installer** (`install.sh`) that sets MagicPodsCore up as a user service.
+- **Private by default:** the control connection only listens on the headset itself
+  (127.0.0.1 and ::1, port 2020), and the settings file, which holds the headphones'
+  pairing keys, is written privately and safely.
+- **Fixes found on the Frame:**
+  - "Switch to speaker when fully removed" and the volume lowering did nothing with the
+    Frame's audio system (PipeWire's `a2dp-auto` profiles); they work now.
+  - After the earbuds reconnected, audio could stay on the speakers; it now switches
+    back to the earbuds.
+  - The service no longer hangs at startup if the audio system is not up yet.
 
-## Supported Headphones
+The changes are on the `frame-arm64` branch; the original project's README is kept in
+[docs/UPSTREAM-README.md](docs/UPSTREAM-README.md), and its WebSocket API in
+[api-reference.md](api-reference.md). Technical notes for the Frame:
+[docs/FRAME.md](docs/FRAME.md).
 
-| Apple            | Beats                  | Samsung           | Google              |
-| ---------------- | ---------------------- | ----------------- | ------------------- |
-| AirPods 1        | PowerBeats Pro         | Galaxy Buds       | Pixel Buds A-Series |
-| AirPods 2        | PowerBeats Pro 2       | Galaxy Buds Plus  | Pixel Buds Pro      |
-| AirPods 3        | PowerBeats 3           | Galaxy Buds Live  | Pixel Buds Pro 2    |
-| AirPods 4        | PowerBeats 4           | Galaxy Buds Pro   | Pixel Buds 2a       |
-| AirPods 4 (ANC)  | Beats Fit Pro          | Galaxy Buds 2     |                     |
-| AirPods 5        | Beats Studio Buds      | Galaxy Buds 2 Pro |                     |
-| AirPods 5 (WCC)  | Beats Studio Buds Plus | Galaxy Buds FE    |                     |
-| AirPods Pro      | Beats Studio Pro       | Galaxy Buds 3     |                     |
-| AirPods Pro 2    | Beats Solo 3           | Galaxy Buds 3 Pro |                     |
-| AirPods Pro 3    | Beats Solo Pro         | Galaxy Buds Core  |                     |
-| AirPods Max      | Beats Studio 3         | Galaxy Buds 3 FE  |                     |
-| AirPods Max 2024 | Beats X                | Galaxy Buds 4     |                     |
-| AirPods Max 2    | Beats Flex             | Galaxy Buds 4 Pro |                     |
-|                  | Beats Solo Buds        |                   |                     |
-|                  | Beats Solo 4           |                   |                     |
-|                  | Beats 360              |                   |                     |
-|                  | Powerbeats Fit         |                   |                     |
+## Building
 
-*Some headphones support only basic features, such as battery monitoring and audio profile selection.*
+GitHub Actions builds every push that changes the code or the installer
+(`.github/workflows/build-arm64.yml`, on GitHub's ARM64 runners). Pushing a tag like `2.0.12-frame.5` creates a draft release with the build, its
+signature and the complete corresponding source.
 
-## Quick Start
+## Credits and licence
 
-### Ubuntu / SteamOS:
-
-Build
-```bash
-git clone https://github.com/steam3d/MagicPodsCore.git && \
-cd MagicPodsCore && \
-docker build -o . . && \
-chmod +x magicpodscore
-```
-
-Run
-```bash
-./magicpodscore
-```
-
-Connect to the WebSocket server at `127.0.0.1:2020` to send commands and receive events.
-
-## API Reference
-
-Explore the WebSocket API, available commands, events, and JSON examples.
-
-📄 [`api-reference.md`](./api-reference.md)
-
-## Known Issues
-
-MagicPodsCore may become unresponsive when running inside VirtualBox.
-
-## Community
-
-- [Join Discord to suggest features or report bugs](https://discord.com/invite/8XZmDQwen6).
-- 💰 [Support the project](https://magicpods.app/donate/).
-
----
-
-Developed by [Aleksandr Maslov](https://github.com/steam3d/) and [Andrey Litvintsev](https://github.com/andreylitvintsev).
+- [MagicPodsCore](https://github.com/steam3d/MagicPodsCore),
+  [MagicPods for Linux](https://github.com/steam3d/MagicPodsLinux) and
+  [MagicPods for Decky](https://github.com/steam3d/MagicPodsDecky) by Aleksandr Maslov
+  (<https://magicpods.app>) and Andrei Litvintsev.
+- This fork and its changes: GPL-3.0, like the original. The bundled FFmpeg libraries
+  are LGPL-2.1; see `SOURCE.txt` in each release.
