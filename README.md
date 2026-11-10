@@ -7,14 +7,14 @@ from a menu inside the Frame's VR interface.
 
 This repository is **MagicPodsCore for Steam Frame**, the background service that talks
 to the headphones. It is a fork of [MagicPodsCore](https://github.com/steam3d/MagicPodsCore)
-by **Aleksandr Maslov and Andrei Litvintsev**, the authors of
+by **[Aleksandr Maslov](https://github.com/steam3d) and
+[Andrey Litvintsev](https://github.com/andreylitvintsev)**, the authors of
 [MagicPods](https://magicpods.app). All the headphone support is their work; this fork
 adds what the Frame needs. The menu lives in its sister repository,
 [jimas21/MagicPodsLinux](https://github.com/jimas21/MagicPodsLinux), and the one-click
 installer below sets up both.
 
-Unofficial: not made by or affiliated with Valve or the MagicPods authors. Licence:
-GPL-3.0, the same as the original.
+Licence: GPL-3.0, the same as the original.
 
 ## Install
 
@@ -54,21 +54,21 @@ Supported headphones: AirPods, Beats, Samsung Galaxy Buds and Google Pixel Buds;
 full list is in the [original README](docs/UPSTREAM-README.md#supported-headphones).
 Features depend on the model.
 
-## Safety and privacy
+## Safe and private
 
-- Everything runs as your normal user; nothing needs root or changes system files.
-- Every release is built by GitHub Actions from the code in these repositories and
-  signed. The installer checks each download's ed25519 signature against a key written
-  into the installer and refuses anything that does not match.
-- MagicPodsCore only listens on the headset itself (127.0.0.1 and ::1, port 2020). The
-  settings file, which holds your headphones' pairing keys, is private to your user
-  (mode 0600). Nothing is sent anywhere.
-- The menu runs inside Steam's VR interface, the way Decky Loader adds menus on the
-  Steam Deck. A Steam update can change those menus; if that happens the battery icon or
-  the tab may disappear until this project catches up. Steam itself and the earbud
-  features (ear detection, speaker switching) keep working.
+- It runs as your normal user and changes nothing outside your user account.
+- Nothing leaves the headset: MagicPodsCore only talks to your headphones and to the
+  menu on the headset itself.
+- Every download is checked before it is installed: the installer only accepts releases
+  signed by this project, and refuses anything else.
+- Your headphones' settings are kept private to your user account.
+- If a Steam update changes Steam's menus, the battery icon or the MagicPods tab may
+  disappear until this project is updated. Your earbuds keep working, including ear
+  detection and switching to the speakers.
 
-## What this fork changes
+## For developers
+
+### What this fork changes
 
 - **ARM64 builds** for the Frame, made by GitHub Actions and published as signed
   releases (`.sha256` and an ed25519 `.sig` beside each download).
@@ -89,7 +89,7 @@ The changes are on the `frame-arm64` branch. The original project's README is ke
 [api-reference.md](api-reference.md). Technical notes, checks and troubleshooting:
 [docs/FRAME.md](docs/FRAME.md).
 
-## Building
+### Building
 
 GitHub Actions builds every push that changes the code or the installer
 (`.github/workflows/build-arm64.yml`, on GitHub's ARM64 runners) and tests the
@@ -98,7 +98,8 @@ its signature, the complete corresponding source and the installer.
 
 ## Credits and licence
 
-- **[MagicPods](https://magicpods.app)** by Aleksandr Maslov and Andrei Litvintsev:
+- **[MagicPods](https://magicpods.app)** by [Aleksandr Maslov](https://github.com/steam3d)
+  and [Andrey Litvintsev](https://github.com/andreylitvintsev):
   [MagicPodsCore](https://github.com/steam3d/MagicPodsCore) (forked here),
   [MagicPods for Linux](https://github.com/steam3d/MagicPodsLinux) (forked for the menu)
   and [MagicPods for Decky](https://github.com/steam3d/MagicPodsDecky) (the menu's

@@ -16,6 +16,7 @@ Python standard library only. Licence: GPL-3.0, like MagicPodsCore.
 """
 
 import argparse
+import http.client
 import base64
 import hashlib
 import os
@@ -48,9 +49,6 @@ COMPONENTS = [
         "uninstall": "~/.local/share/magicpods-app/frame/uninstall.sh",
     },
 ]
-
-MENU_DIR = os.path.expanduser("~/.local/share/magicpods-app/frame")
-
 
 # --- ed25519 signature check -------------------------------------------------------
 # Uses the `cryptography` package when it is installed; otherwise the reference
@@ -163,11 +161,14 @@ def fetch(url):
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
+            expected = resp.headers.get("Content-Length")
             data = resp.read(MAX_DOWNLOAD + 1)
-    except OSError as e:
-        raise InstallError(f"could not download {url}: {e}") from None
+    except (OSError, http.client.HTTPException) as e:
+        raise InstallError(f"could not download {url}: {e}; check the connection and try again") from None
     if len(data) > MAX_DOWNLOAD:
         raise InstallError(f"{url} is larger than expected; not using it")
+    if expected is not None and expected.isdigit() and int(expected) != len(data):
+        raise InstallError(f"the download of {url} was cut short; check the connection and try again")
     return data
 
 
@@ -244,7 +245,9 @@ def install(args):
         )
     if not args.download_only and shutil.which("systemctl") is None:
         raise InstallError("systemctl was not found; this installer needs SteamOS")
-    first_menu_install = not os.path.isdir(MENU_DIR)
+    menu_was_running = args.download_only or subprocess.run(
+        ["systemctl", "--user", "is-active", "--quiet", "magicpods-steamui.service"],
+        env=clean_env()).returncode == 0
     parent = args.download_only or None
     if parent:
         os.makedirs(parent, exist_ok=True)
@@ -265,7 +268,7 @@ def install(args):
     print()
     print("MagicPods is installed.")
     print("- Pair your headphones in Steam Settings > Bluetooth if you have not yet.")
-    if first_menu_install:
+    if not menu_was_running:
         print("- Restart the headset once, so Steam shows the MagicPods menu.")
     print("- To update later, run this installer again. Your settings are kept.")
 
@@ -275,6 +278,11 @@ def uninstall(args):
         script = os.path.expanduser(c["uninstall"])
         if not os.path.isfile(script):
             print(f"{c['name']} is not installed.")
+            if args.purge and c["name"] == "MagicPodsCore":
+                conf = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "magicpods")
+                if os.path.isdir(conf):
+                    shutil.rmtree(conf)
+                    print("MagicPods settings deleted.")
             continue
         cmd = ["sh", script]
         if args.purge and c["name"] == "MagicPodsCore":
@@ -301,6 +309,9 @@ def main(argv=None):
         else:
             install(args)
     except InstallError as e:
+        print(f"\nerror: {e}", file=sys.stderr)
+        return 1
+    except (OSError, tarfile.TarError) as e:
         print(f"\nerror: {e}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:

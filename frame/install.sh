@@ -41,9 +41,17 @@ rm -rf "$dest.old"
 cp -f "$dest/magicpodscore.service" "$units/magicpodscore.service"
 systemctl --user daemon-reload
 systemctl --user enable magicpodscore.service
-systemctl --user restart magicpodscore.service
-sleep 2
-if systemctl --user is-active --quiet magicpodscore.service; then
+systemctl --user restart --no-block magicpodscore.service
+# The unit waits up to 30 s for Bluetooth before it starts; wait for it.
+state=unknown
+for i in $(seq 1 40); do
+    state="$(systemctl --user is-active magicpodscore.service 2>/dev/null || true)"
+    case "$state" in
+        active|failed|inactive) break ;;
+    esac
+    sleep 1
+done
+if [ "$state" = active ]; then
     echo "MagicPodsCore installed and running."
 else
     echo "error: magicpodscore.service did not start; see: journalctl --user -u magicpodscore" >&2
