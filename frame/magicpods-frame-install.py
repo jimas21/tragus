@@ -269,15 +269,23 @@ def write_versions(versions):
     os.replace(tmp, VERSIONS_FILE)
 
 
+# Same path the menu's helper (menu/magicpods-steamui.py, UPDATE_STATUS_FILE) reads.
+DEFAULT_STATUS_FILE = os.path.join(
+    os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "magicpods", "update.json")
+
+
 class Status:
     """Progress for the MagicPods menu (its helper reads the file): a JSON object with
     state (checking, updating, uptodate, updated, failed), message and time."""
 
-    def __init__(self, path):
+    FINAL = ("uptodate", "updated", "failed")
+
+    def __init__(self, path, final_only=False):
         self.path = path
+        self.final_only = final_only  # a run the menu did not start: only its result
 
     def set(self, state, message):
-        if not self.path:
+        if not self.path or (self.final_only and state not in self.FINAL):
             return
         try:
             os.makedirs(os.path.dirname(self.path), exist_ok=True)
@@ -455,7 +463,16 @@ def main(argv=None):
     args = ap.parse_args(argv)
     if args.purge and not args.uninstall:
         ap.error("--purge only goes with --uninstall")
-    status = Status(None if (args.uninstall or args.download_only) else args.status_file)
+    if args.uninstall or args.download_only:
+        status = Status(None)
+    elif args.status_file:
+        status = Status(args.status_file)
+    else:
+        # Started by hand or from the install button: still tell the menu how it ended, so an
+        # earlier failed update stops showing once this run succeeds. Only the final state,
+        # because the menu's helper marks a "checking"/"updating" older than 60 s whose
+        # magicpods-update unit is not running as "did not finish".
+        status = Status(DEFAULT_STATUS_FILE, final_only=True)
 
     def on_term(signum, frame):
         raise KeyboardInterrupt

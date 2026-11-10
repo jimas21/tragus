@@ -41,13 +41,16 @@ rm -rf "$dest.old"
 cp -f "$dest/magicpodscore.service" "$units/magicpodscore.service"
 systemctl --user daemon-reload
 systemctl --user enable magicpodscore.service
+systemctl --user reset-failed magicpodscore.service 2>/dev/null || true
 systemctl --user restart --no-block magicpodscore.service
-# The unit waits up to 30 s for Bluetooth before it starts; wait for it.
+# The unit waits up to 30 s for Bluetooth before it starts; wait for it. Right after a
+# --no-block restart it can still read "inactive" (its start job has not run yet), so only
+# "active" or "failed" end the wait (reset-failed above means "failed" is never stale).
 state=unknown
-for i in $(seq 1 40); do
+for i in $(seq 1 45); do
     state="$(systemctl --user is-active magicpodscore.service 2>/dev/null || true)"
     case "$state" in
-        active|failed|inactive) break ;;
+        active|failed) break ;;
     esac
     sleep 1
 done

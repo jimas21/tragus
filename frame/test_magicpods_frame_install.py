@@ -2,8 +2,10 @@
 
 import importlib.util
 import io
+import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -140,6 +142,86 @@ class CliTests(unittest.TestCase):
     def test_purge_needs_uninstall(self):
         with self.assertRaises(SystemExit):
             mpi.main(["--purge"])
+
+
+class StatusTests(unittest.TestCase):
+    def test_final_only_skips_progress(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "s", "update.json")
+            st = mpi.Status(path, final_only=True)
+            st.set("checking", "Checking...")
+            self.assertFalse(os.path.exists(path))
+            st.set("updated", "Updated to x")
+            with open(path, encoding="utf-8") as f:
+                self.assertEqual(json.load(f)["state"], "updated")
+
+    def test_full_status_writes_progress(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "update.json")
+            mpi.Status(path).set("checking", "Checking...")
+            with open(path, encoding="utf-8") as f:
+                self.assertEqual(json.load(f)["state"], "checking")
+
+    def test_default_path_matches_menu_helper(self):
+        with open(os.path.join(_HERE, "..", "menu", "magicpods-steamui.py"), encoding="utf-8") as f:
+            helper = f.read()
+        self.assertIn('"magicpods", "update.json")', helper)
+        self.assertTrue(mpi.DEFAULT_STATUS_FILE.endswith(os.path.join("magicpods", "update.json")))
+
+
+FAKE_SYSTEMCTL = """#!/bin/sh
+echo "$*" >> "$FAKE_DIR/calls"
+if [ "$2" = is-active ]; then
+    n=$(cat "$FAKE_DIR/n" 2>/dev/null || echo 0); n=$((n + 1)); echo $n > "$FAKE_DIR/n"
+    if [ "$FAKE_MODE" = failed ]; then echo failed; exit 3; fi
+    if [ $n -le 2 ]; then echo inactive; exit 3; fi
+    echo active; exit 0
+fi
+exit 0
+"""
+
+
+@unittest.skipUnless(shutil.which("sh") and shutil.which("seq") and os.name == "posix", "needs a POSIX sh")
+class CoreInstallShTests(unittest.TestCase):
+    """frame/install.sh against a fake systemctl: a --no-block restart that still reads
+    "inactive" for the first polls (as on the headset, 2026-11-09) must not fail."""
+
+    def _run(self, mode):
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, "src")
+            os.makedirs(os.path.join(src, "lib"))
+            shutil.copy(os.path.join(_HERE, "install.sh"), src)
+            with open(os.path.join(src, "magicpodscore"), "w") as f:
+                f.write("#!/bin/sh\necho magicpodscore test\n")
+            os.chmod(os.path.join(src, "magicpodscore"), 0o755)
+            for name in ("lib/libavcodec.so.58", "lib/libavutil.so.56", "magicpodscore.service"):
+                open(os.path.join(src, name), "w").close()
+            bindir = os.path.join(d, "bin")
+            os.makedirs(bindir)
+            with open(os.path.join(bindir, "systemctl"), "w") as f:
+                f.write(FAKE_SYSTEMCTL)
+            os.chmod(os.path.join(bindir, "systemctl"), 0o755)
+            home = os.path.join(d, "home")
+            os.makedirs(home)
+            env = {"PATH": bindir + os.pathsep + os.environ["PATH"], "HOME": home,
+                   "FAKE_DIR": d, "FAKE_MODE": mode}
+            r = subprocess.run(["sh", os.path.join(src, "install.sh")], env=env,
+                               capture_output=True, text=True, timeout=90)
+            with open(os.path.join(d, "calls")) as f:
+                calls = f.read()
+            return r, calls
+
+    def test_inactive_right_after_restart_is_not_failure(self):
+        r, calls = self._run("slow")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("installed and running", r.stdout)
+        self.assertIn("--user reset-failed magicpodscore.service", calls)
+        self.assertLess(calls.index("reset-failed"), calls.index("restart --no-block"))
+
+    def test_failed_is_reported(self):
+        r, _ = self._run("failed")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("did not start", r.stderr)
 
 
 class FinishMessageTests(unittest.TestCase):
