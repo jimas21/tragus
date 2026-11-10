@@ -40,10 +40,8 @@ the same way.
 
 ## Works with Laterna
 
-[Laterna](https://github.com/jimas21/laterna), the VR video player for the Steam Frame,
-is adding Tragus support: your video pauses when you take an earbud out, and Laterna
-will be able to install earbud support for you from **Settings › Earbuds › Install
-earbud support**. Until that is in a Laterna release, install with the button above.
+[Laterna](https://github.com/jimas21/laterna) is a VR video player for the Steam Frame,
+made to work with Tragus.
 
 ## What you get
 
