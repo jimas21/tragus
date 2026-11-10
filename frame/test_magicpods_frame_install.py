@@ -142,6 +142,21 @@ class CliTests(unittest.TestCase):
             mpi.main(["--purge"])
 
 
+class FinishMessageTests(unittest.TestCase):
+    def test_restart_is_the_headline_when_needed(self):
+        lines = mpi.finish_message(restart_needed=True)
+        self.assertIn("restart the headset to finish installing", lines[1])
+        self.assertNotIn("No restart needed", "\n".join(lines))
+
+    def test_no_restart_said_plainly(self):
+        text = "\n".join(mpi.finish_message(restart_needed=False))
+        self.assertIn("No restart needed", text)
+        self.assertNotIn("restart the headset", text)
+
+    def test_hook_check_offline_is_false(self):
+        self.assertFalse(mpi.steam_menu_hook_on("http://127.0.0.1:9/json/list"))
+
+
 def _launcher_code(name):
     """The python3 -c program and trailing arguments from a .desktop launcher's Exec line."""
     with open(os.path.join(_HERE, name), encoding="utf-8") as f:

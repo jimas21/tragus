@@ -363,9 +363,6 @@ def install(args, status):
             print("Tragus is up to date.")
             status.set("uptodate", "Up to date")
             return
-    menu_was_running = args.download_only or subprocess.run(
-        ["systemctl", "--user", "is-active", "--quiet", "magicpods-steamui.service"],
-        env=clean_env()).returncode == 0
     parent = args.download_only or None
     if parent:
         os.makedirs(parent, exist_ok=True)
@@ -390,11 +387,38 @@ def install(args, status):
     if lock:
         lock.close()
     print()
-    print("Tragus is installed.")
-    print("- Pair your headphones in Steam Settings > Bluetooth if you have not yet.")
-    if not menu_was_running:
-        print("- Restart the headset once, so Steam shows the Tragus menu.")
-    print("- Tragus keeps itself up to date (Tragus menu > Settings > Updates).")
+    print("\n".join(finish_message(restart_needed=not steam_menu_hook_on())))
+
+
+# Steam's local DevTools endpoint. The menu is added to Steam's pages through it, and Steam
+# only opens it when it starts with the marker file menu/install.sh creates. So: endpoint up
+# = the menu shows now; endpoint down = Steam needs one restart (first install only).
+STEAM_DEVTOOLS = "http://127.0.0.1:8080/json/list"
+
+
+def steam_menu_hook_on(url=STEAM_DEVTOOLS):
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(url, timeout=3) as r:
+            return r.status == 200
+    except (OSError, http.client.HTTPException):
+        return False
+
+
+def finish_message(restart_needed):
+    if restart_needed:
+        lines = ["=" * 58,
+                 "  Almost done: restart the headset to finish installing.",
+                 "=" * 58,
+                 "After the restart, your earbuds' battery shows in the bar at the",
+                 "bottom, and Tragus has its own tab in the quick menu."]
+    else:
+        lines = ["Tragus is installed and running. No restart needed.",
+                 "Your earbuds' battery shows in the bar at the bottom, and Tragus",
+                 "has its own tab in the quick menu."]
+    return lines + ["",
+                    "Pair your headphones in Steam Settings > Bluetooth if you have not yet.",
+                    "Tragus keeps itself up to date (Tragus tab > Settings > Updates)."]
 
 
 def uninstall(args):
