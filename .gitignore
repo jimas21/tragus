@@ -4,4 +4,5 @@ build/
 
 # Docker builder
 docker_build/
-magicpodscore__pycache__/
+magicpodscore
+__pycache__/
