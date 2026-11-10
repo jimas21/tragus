@@ -21,26 +21,32 @@ Licence: GPL-3.0, the same as the original.
 On the Steam Frame:
 
 1. Pair your headphones in the Frame's Bluetooth settings.
-2. Switch to **Desktop Mode**, open this page in the headset's browser and press the
-   button to download the installer:
+2. Open a web browser on the headset, go to this page and press the button:
 
    <a href="https://github.com/jimas21/MagicPodsCore/releases/latest/download/Install-MagicPods.desktop"><img src="docs/images/install-button.svg" alt="Install MagicPods" width="240" /></a>
 
-3. Open `Install-MagicPods.desktop` from your Downloads folder and confirm when Desktop
-   Mode asks whether to trust it. A terminal window opens, downloads the latest
-   MagicPodsCore and MagicPods menu releases, checks their signatures and installs both.
-4. Restart the headset once. The earbuds battery then shows in the top bar, next to the
-   headset battery.
+3. Open the file it downloads (`Install-MagicPods.desktop`). If you are asked whether to
+   trust it, say yes. A window opens and installs everything; it checks each download
+   before installing it.
+4. Restart the headset once. The earbuds battery then shows in the bottom bar, next to
+   the headset battery.
 
 **Update:** run the installer again; your settings are kept.
-**Remove:** download and open
+**Remove:** open
 [`Uninstall-MagicPods.desktop`](https://github.com/jimas21/MagicPodsCore/releases/latest/download/Uninstall-MagicPods.desktop)
 the same way. Your headphone settings stay in `~/.config/magicpods`; delete that folder to
 remove them too.
 
+## Works with Laterna
+
+[Laterna](https://github.com/jimas21/laterna), the VR video player for the Steam Frame,
+is adding MagicPods support: your video pauses when you take an earbud out, and Laterna
+will be able to install earbud support for you from **Settings › Earbuds › Install
+earbud support**. Until that is in a Laterna release, install with the button above.
+
 ## What you get
 
-- **Battery in the top bar** of the Frame's VR interface: one bar per earbud and the
+- **Battery in the bottom bar** of the Frame's VR interface: one bar per earbud and the
   percentage. Clicking it opens the MagicPods menu.
 - **A MagicPods tab** in the quick menu, with the same menus as the
   [MagicPods Decky plugin](https://github.com/steam3d/MagicPodsDecky) on the Steam Deck:
