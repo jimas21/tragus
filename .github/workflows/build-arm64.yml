@@ -74,6 +74,18 @@ jobs:
         with:
           persist-credentials: false
 
+      # The one-click installer (frame/magicpods-frame-install.py, started by
+      # Install-MagicPods.desktop): offline tests for its signature check and unpacking.
+      - name: Test the Frame installer
+        run: |
+          python3 -m py_compile frame/magicpods-frame-install.py
+          python3 -m unittest discover -s frame -p 'test_*.py' -v
+          sh -n frame/install.sh
+          sh -n frame/uninstall.sh
+          for f in frame/Install-MagicPods.desktop frame/Uninstall-MagicPods.desktop; do
+            grep -q '^Exec=konsole --hold -e sh -c "curl -fsSL https://github.com/jimas21/MagicPodsCore/releases/latest/download/magicpods-frame-install.py' "$f"
+          done
+
       # Package list is the Dockerfile's, minus nasm (x86 only), doxygen and graphviz
       # (CMakeLists.txt does not use them; sdbus-c++ v1.6.0 only runs doxygen when
       # BUILD_DOXYGEN_DOC is on, and that defaults to OFF). `file` is added for the
@@ -447,6 +459,23 @@ jobs:
           PY
           cat "out/${DIST_NAME}.tar.gz.sig"
 
+      # The one-click installer and its Desktop Mode launchers, published beside the
+      # build so that releases/latest/download/<name> always finds them.
+      - name: Check out the installer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: src
+          sparse-checkout: frame
+          persist-credentials: false
+
+      - name: Add the installer
+        run: |
+          for f in magicpods-frame-install.py Install-MagicPods.desktop Uninstall-MagicPods.desktop; do
+            cp "src/frame/${f}" "out/${f}"
+          done
+          (cd out && sha256sum magicpods-frame-install.py Install-MagicPods.desktop Uninstall-MagicPods.desktop > installer.sha256)
+          cat out/installer.sha256
+
       - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -468,8 +497,17 @@ jobs:
             echo "- \`${DIST_NAME}-source.tar.gz\`: corresponding source (this commit, the dependency"
             echo "  sources CMake fetched, and the FFmpeg release tarball)"
             echo
-            echo "Install: unpack, then run \`./magicpodscore-linux-arm64/install.sh\` (see README.md and docs/FRAME.md)."
+            echo "- \`Install-MagicPods.desktop\`: one-click install or update on a Steam Frame, in Desktop Mode."
+            echo "  It runs \`magicpods-frame-install.py\`, which downloads the latest MagicPodsCore and"
+            echo "  MagicPods menu releases, checks their signatures and installs both."
+            echo "  \`Uninstall-MagicPods.desktop\` removes them (settings kept). Hashes in \`installer.sha256\`."
+            echo
+            echo "Install: see ${SERVER_URL}/${REPO}#install"
             echo "License: GPL-3.0 (MagicPodsCore), LGPL-2.1-or-later (bundled FFmpeg libraries)."
           } > notes.md
           cat notes.md
-          gh release create "${TAG}" --repo "${REPO}" --draft --verify-tag             --title "${TAG} (linux-arm64)" --notes-file notes.md             "${DIST_NAME}.tar.gz" "${DIST_NAME}.tar.gz.sha256" "${DIST_NAME}.tar.gz.sig"             "${DIST_NAME}-source.tar.gz" "${DIST_NAME}-source.tar.gz.sha256"
+          gh release create "${TAG}" --repo "${REPO}" --draft --verify-tag \
+            --title "${TAG} (linux-arm64)" --notes-file notes.md \
+            "${DIST_NAME}.tar.gz" "${DIST_NAME}.tar.gz.sha256" "${DIST_NAME}.tar.gz.sig" \
+            "${DIST_NAME}-source.tar.gz" "${DIST_NAME}-source.tar.gz.sha256" \
+            magicpods-frame-install.py Install-MagicPods.desktop Uninstall-MagicPods.desktop installer.sha256

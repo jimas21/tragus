@@ -1,0 +1,313 @@
+#!/usr/bin/env python3
+"""Install, update or remove MagicPods on a Steam Frame, for the current user. No root.
+
+Downloads the latest signed releases of
+  MagicPodsCore           https://github.com/jimas21/MagicPodsCore
+  the MagicPods menu      https://github.com/jimas21/MagicPodsLinux
+checks each one's ed25519 signature against the public key pinned below, unpacks it
+safely and runs its own install.sh. Your headphone settings are never overwritten.
+
+Usually started by Install-MagicPods.desktop (Desktop Mode), or by hand:
+  python3 magicpods-frame-install.py              install or update both
+  python3 magicpods-frame-install.py --uninstall  remove both (settings kept)
+  python3 magicpods-frame-install.py --uninstall --purge   also delete the settings
+
+Python standard library only. Licence: GPL-3.0, like MagicPodsCore.
+"""
+
+import argparse
+import base64
+import hashlib
+import os
+import platform
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import urllib.request
+
+USER_AGENT = "magicpods-frame-install"
+MAX_DOWNLOAD = 64 * 1024 * 1024
+
+COMPONENTS = [
+    {
+        "name": "MagicPodsCore",
+        "repo": "jimas21/MagicPodsCore",
+        "asset": "magicpodscore-linux-arm64.tar.gz",
+        "top": "magicpodscore-linux-arm64",
+        "pubkey": "GOT1qW3jXgAMmr3pyoQece9CnIIrNlgiZysjnNC/Hdk=",
+        "uninstall": "~/.local/share/magicpodscore/uninstall.sh",
+    },
+    {
+        "name": "MagicPods menu",
+        "repo": "jimas21/MagicPodsLinux",
+        "asset": "magicpods-frame-menu.tar.gz",
+        "top": "magicpods-frame-menu",
+        "pubkey": "jcgo8/3boB/B09Ac6pu26NTvNDBpfdY/yh9blxGIfuw=",
+        "uninstall": "~/.local/share/magicpods-app/frame/uninstall.sh",
+    },
+]
+
+MENU_DIR = os.path.expanduser("~/.local/share/magicpods-app/frame")
+
+
+# --- ed25519 signature check -------------------------------------------------------
+# Uses the `cryptography` package when it is installed; otherwise the reference
+# verification from RFC 8032, section 6 (pure Python; slow, but it checks one
+# signature per download).
+
+_P = 2**255 - 19
+_L = 2**252 + 27742317777372353535851937790883648493
+_D = -121665 * pow(121666, _P - 2, _P) % _P
+_SQRT_M1 = pow(2, (_P - 1) // 4, _P)
+
+
+def _recover_x(y, sign):
+    if y >= _P:
+        return None
+    x2 = (y * y - 1) * pow(_D * y * y + 1, _P - 2, _P) % _P
+    if x2 == 0:
+        return None if sign else 0
+    x = pow(x2, (_P + 3) // 8, _P)
+    if (x * x - x2) % _P != 0:
+        x = x * _SQRT_M1 % _P
+    if (x * x - x2) % _P != 0:
+        return None
+    if (x & 1) != sign:
+        x = _P - x
+    return x
+
+
+_GY = 4 * pow(5, _P - 2, _P) % _P
+_GX = _recover_x(_GY, 0)
+_G = (_GX, _GY, 1, _GX * _GY % _P)
+
+
+def _add(a, b):
+    p1 = (a[1] - a[0]) * (b[1] - b[0]) % _P
+    p2 = (a[1] + a[0]) * (b[1] + b[0]) % _P
+    p3 = 2 * a[3] * b[3] * _D % _P
+    p4 = 2 * a[2] * b[2] % _P
+    e, f, g, h = p2 - p1, p4 - p3, p4 + p3, p2 + p1
+    return (e * f % _P, g * h % _P, f * g % _P, e * h % _P)
+
+
+def _mul(s, pt):
+    q = (0, 1, 1, 0)
+    while s > 0:
+        if s & 1:
+            q = _add(q, pt)
+        pt = _add(pt, pt)
+        s >>= 1
+    return q
+
+
+def _equal(a, b):
+    return (a[0] * b[2] - b[0] * a[2]) % _P == 0 and (a[1] * b[2] - b[1] * a[2]) % _P == 0
+
+
+def _decompress(s):
+    if len(s) != 32:
+        return None
+    y = int.from_bytes(s, "little")
+    sign = y >> 255
+    y &= (1 << 255) - 1
+    x = _recover_x(y, sign)
+    if x is None:
+        return None
+    return (x, y, 1, x * y % _P)
+
+
+def _verify_pure(pub, msg, sig):
+    if len(pub) != 32 or len(sig) != 64:
+        return False
+    a = _decompress(pub)
+    r = _decompress(sig[:32])
+    if a is None or r is None:
+        return False
+    s = int.from_bytes(sig[32:], "little")
+    if s >= _L:
+        return False
+    h = int.from_bytes(hashlib.sha512(sig[:32] + pub + msg).digest(), "little") % _L
+    return _equal(_mul(s, _G), _add(r, _mul(h, a)))
+
+
+def verify_signature(pub, msg, sig, force_pure=False):
+    """True when sig is a valid ed25519 signature of msg by the raw 32-byte key pub."""
+    if not force_pure:
+        try:
+            from cryptography.exceptions import InvalidSignature
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        except ImportError:
+            pass
+        else:
+            if len(pub) != 32 or len(sig) != 64:
+                return False
+            try:
+                Ed25519PublicKey.from_public_bytes(pub).verify(sig, msg)
+                return True
+            except (InvalidSignature, ValueError):
+                return False
+    return _verify_pure(pub, msg, sig)
+
+
+# --- download, check, unpack ---------------------------------------------------------
+
+
+class InstallError(Exception):
+    pass
+
+
+def fetch(url):
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = resp.read(MAX_DOWNLOAD + 1)
+    except OSError as e:
+        raise InstallError(f"could not download {url}: {e}") from None
+    if len(data) > MAX_DOWNLOAD:
+        raise InstallError(f"{url} is larger than expected; not using it")
+    return data
+
+
+def check_signature(component, data, sig_text):
+    try:
+        sig = base64.b64decode(sig_text.strip(), validate=True)
+    except (ValueError, TypeError):
+        raise InstallError(f"{component['asset']}.sig is not valid base64") from None
+    pub = base64.b64decode(component["pubkey"])
+    if not verify_signature(pub, data, sig):
+        raise InstallError(
+            f"the signature of {component['asset']} does not match the pinned key; "
+            "the download was not used"
+        )
+
+
+def safe_extract(archive_path, dest, top):
+    """Unpack only regular files and folders under top/; refuse anything else."""
+    with tarfile.open(archive_path, "r:gz") as tar:
+        members = tar.getmembers()
+        if not members:
+            raise InstallError("the release archive is empty")
+        for m in members:
+            name = m.name
+            parts = name.split("/")
+            if (
+                name.startswith("/")
+                or "\\" in name
+                or ".." in parts
+                or parts[0] != top
+                or not (m.isfile() or m.isdir())
+            ):
+                raise InstallError(f"unexpected entry in the release archive: {name!r}")
+        for m in members:
+            target = os.path.join(dest, *m.name.split("/"))
+            if m.isdir():
+                os.makedirs(target, exist_ok=True)
+                continue
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            src = tar.extractfile(m)
+            with open(target, "wb") as out:
+                shutil.copyfileobj(src, out)
+            os.chmod(target, 0o755 if m.mode & 0o111 else 0o644)
+    root = os.path.join(dest, top)
+    if not os.path.isfile(os.path.join(root, "install.sh")):
+        raise InstallError(f"install.sh is missing from {top}")
+    return root
+
+
+def download_component(component, workdir):
+    base = f"https://github.com/{component['repo']}/releases/latest/download/{component['asset']}"
+    print(f"Downloading {component['name']} ...", flush=True)
+    data = fetch(base)
+    sig_text = fetch(base + ".sig").decode("ascii", "replace")
+    check_signature(component, data, sig_text)
+    print(f"  signature OK ({len(data):,} bytes, sha256 {hashlib.sha256(data).hexdigest()[:16]}...)")
+    archive = os.path.join(workdir, component["asset"])
+    with open(archive, "wb") as f:
+        f.write(data)
+    return safe_extract(archive, workdir, component["top"])
+
+
+def clean_env():
+    env = dict(os.environ)
+    for k in ("LD_LIBRARY_PATH", "LD_PRELOAD"):
+        env.pop(k, None)
+    return env
+
+
+def install(args):
+    if platform.machine() not in ("aarch64", "arm64") and not args.download_only:
+        raise InstallError(
+            f"this is for the Steam Frame (ARM64); this computer is {platform.machine()}"
+        )
+    if not args.download_only and shutil.which("systemctl") is None:
+        raise InstallError("systemctl was not found; this installer needs SteamOS")
+    first_menu_install = not os.path.isdir(MENU_DIR)
+    parent = args.download_only or None
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="magicpods-install-", dir=parent) as work:
+        roots = [download_component(c, work) for c in COMPONENTS]
+        if args.download_only:
+            for c, root in zip(COMPONENTS, roots):
+                keep = os.path.join(args.download_only, c["top"])
+                shutil.rmtree(keep, ignore_errors=True)
+                shutil.move(root, keep)
+                print(f"  unpacked to {keep}")
+            return
+        for c, root in zip(COMPONENTS, roots):
+            print(f"Installing {c['name']} ...", flush=True)
+            r = subprocess.run(["sh", os.path.join(root, "install.sh")], env=clean_env())
+            if r.returncode != 0:
+                raise InstallError(f"{c['name']} did not install (install.sh exited {r.returncode})")
+    print()
+    print("MagicPods is installed.")
+    print("- Pair your headphones in Steam Settings > Bluetooth if you have not yet.")
+    if first_menu_install:
+        print("- Restart the headset once, so Steam shows the MagicPods menu.")
+    print("- To update later, run this installer again. Your settings are kept.")
+
+
+def uninstall(args):
+    for c in reversed(COMPONENTS):
+        script = os.path.expanduser(c["uninstall"])
+        if not os.path.isfile(script):
+            print(f"{c['name']} is not installed.")
+            continue
+        cmd = ["sh", script]
+        if args.purge and c["name"] == "MagicPodsCore":
+            cmd.append("--purge")
+        r = subprocess.run(cmd, env=clean_env())
+        if r.returncode != 0:
+            raise InstallError(f"removing {c['name']} failed (exit {r.returncode})")
+    print("Done.")
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="Install, update or remove MagicPods on a Steam Frame.")
+    ap.add_argument("--uninstall", action="store_true", help="remove MagicPods")
+    ap.add_argument("--purge", action="store_true",
+                    help="with --uninstall: also delete the settings (they hold the headphones' pairing keys)")
+    ap.add_argument("--download-only", metavar="DIR",
+                    help="download, check and unpack the releases into DIR without installing")
+    args = ap.parse_args(argv)
+    if args.purge and not args.uninstall:
+        ap.error("--purge only goes with --uninstall")
+    try:
+        if args.uninstall:
+            uninstall(args)
+        else:
+            install(args)
+    except InstallError as e:
+        print(f"\nerror: {e}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("\ncancelled", file=sys.stderr)
+        return 130
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

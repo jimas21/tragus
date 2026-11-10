@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Install MagicPods
+Comment=Installs or updates MagicPods (earbuds battery, noise control and ear detection) on this Steam Frame
+Icon=system-software-install
+Exec=konsole --hold -e sh -c "curl -fsSL https://github.com/jimas21/MagicPodsCore/releases/latest/download/magicpods-frame-install.py -o /tmp/magicpods-frame-install.py && python3 -I /tmp/magicpods-frame-install.py"
+Terminal=false
