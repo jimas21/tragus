@@ -34,8 +34,7 @@ On the Steam Frame:
 **Update:** run the installer again; your settings are kept.
 **Remove:** open
 [`Uninstall-MagicPods.desktop`](https://github.com/jimas21/MagicPodsCore/releases/latest/download/Uninstall-MagicPods.desktop)
-the same way. Your headphone settings stay in `~/.config/magicpods`; delete that folder to
-remove them too.
+the same way.
 
 ## Works with Laterna
 
@@ -60,47 +59,18 @@ Supported headphones: AirPods, Beats, Samsung Galaxy Buds and Google Pixel Buds;
 full list is in the [original README](docs/UPSTREAM-README.md#supported-headphones).
 Features depend on the model.
 
-## Safe and private
-
-- It runs as your normal user and changes nothing outside your user account.
-- Nothing leaves the headset: MagicPodsCore only talks to your headphones and to the
-  menu on the headset itself.
-- Every download is checked before it is installed: the installer only accepts releases
-  signed by this project, and refuses anything else.
-- Your headphones' settings are kept private to your user account.
-- If a Steam update changes Steam's menus, the battery icon or the MagicPods tab may
-  disappear until this project is updated. Your earbuds keep working, including ear
-  detection and switching to the speakers.
-
 ## For developers
 
-### What this fork changes
+This fork keeps the original code and adds what the Frame needs:
 
-- **ARM64 builds** for the Frame, made by GitHub Actions and published as signed
-  releases (`.sha256` and an ed25519 `.sig` beside each download).
-- **Installers**: `install.sh` sets MagicPodsCore up as a user service; the one-click
-  `Install-MagicPods.desktop` and `magicpods-frame-install.py` install it together with
-  the menu.
-- **Private by default**: the control connection only listens on the headset, and the
-  settings file is written privately and atomically.
-- **Fixes found on the Frame**:
-  - "Switch to speaker when fully removed" and the volume lowering did nothing with the
-    Frame's audio system (PipeWire's `a2dp-auto` profiles); they work now.
-  - After the earbuds reconnected, audio could stay on the speakers; it now switches
-    back to the earbuds.
-  - The service no longer hangs at startup if the audio system is not up yet.
+- Builds for the Frame, made on GitHub for every release.
+- The install button and the script it runs (in `frame/`).
+- Audio fixes for the Frame: switching to the speakers when you take the earbuds out,
+  and back when you put them in.
 
-The changes are on the `frame-arm64` branch. The original project's README is kept in
-[docs/UPSTREAM-README.md](docs/UPSTREAM-README.md) and its WebSocket API in
-[api-reference.md](api-reference.md). Technical notes, checks and troubleshooting:
-[docs/FRAME.md](docs/FRAME.md).
-
-### Building
-
-GitHub Actions builds every push that changes the code or the installer
-(`.github/workflows/build-arm64.yml`, on GitHub's ARM64 runners) and tests the
-installer. Pushing a tag like `2.0.12-frame.6` creates a draft release with the build,
-its signature, the complete corresponding source and the installer.
+Everything is on the `frame-arm64` branch. Pushing a tag like `2.0.12-frame.8` builds a
+release. How the install works: [docs/FRAME.md](docs/FRAME.md). The original README is in
+[docs/UPSTREAM-README.md](docs/UPSTREAM-README.md).
 
 ## Credits and licence
 
@@ -111,8 +81,5 @@ its signature, the complete corresponding source and the installer.
   and [MagicPods for Decky](https://github.com/steam3d/MagicPodsDecky) (the menu's
   design, behaviour and noise-mode icons follow it). If MagicPods is useful to you,
   consider [supporting the original project](https://magicpods.app/donate/).
-- This fork and its changes: GPL-3.0, like the original (see [LICENSE](LICENSE)). The
-  bundled FFmpeg libraries are LGPL-2.1-or-later; `SOURCE.txt` in each release says where
-  the corresponding source is, and every release includes it.
-- AirPods is a trademark of Apple Inc.; Beats, Galaxy Buds, Pixel Buds and Steam Frame
-  belong to their owners. They are named only to say what this works with.
+- This fork: GPL-3.0, like the original (see [LICENSE](LICENSE)). It includes parts of
+  FFmpeg (LGPL-2.1); each release comes with the full source.
