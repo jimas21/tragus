@@ -21,7 +21,7 @@ class SettingsService {
 private:
     toml::table _settings{};
     std::string _filePath;
-    Event<UpdatedSettingNotification> _onSettingUpdate{};
+    ThreadSafeEvent<UpdatedSettingNotification> _onSettingUpdate{};
     // Tragus: settings are read and saved from several threads (WebSocket loop, device
     // reader, BLE). Every access to _settings and every file write holds this lock;
     // change events fire after it is released, with their own copy of the value.
@@ -67,7 +67,7 @@ public:
     void SaveSetting(const std::string& container, const std::string& name, const toml::node& value);
     void SaveSetting(const std::string& container, const std::string& name, const toml::node_view<const toml::node>& value);
 
-    Event<UpdatedSettingNotification>& GetOnSettingUpdateEvent() {
+    ThreadSafeEvent<UpdatedSettingNotification>& GetOnSettingUpdateEvent() {
         return _onSettingUpdate;
     }
 

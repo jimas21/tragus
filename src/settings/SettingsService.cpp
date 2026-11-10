@@ -12,6 +12,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
+#include <cctype>
 #include <chrono>
 #include <vector>
 
@@ -121,6 +122,17 @@ void SettingsService::RemoveStaleTempFiles() {
     for (std::filesystem::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
         const std::string name = it->path().filename().string();
         if (name.size() != prefix.size() + 6 || name.compare(0, prefix.size(), prefix) != 0)
+            continue;
+        // mkstemp suffixes are 6 letters/digits; ask for a digit or a capital too, so a
+        // hand-made "config.toml.backup" or ".broken" is never touched.
+        bool alnum = true, mixed = false;
+        for (const char c : name.substr(prefix.size())) {
+            if (!std::isalnum(static_cast<unsigned char>(c)))
+                alnum = false;
+            if (std::isdigit(static_cast<unsigned char>(c)) || std::isupper(static_cast<unsigned char>(c)))
+                mixed = true;
+        }
+        if (!alnum || !mixed)
             continue;
         std::error_code entryEc;
         if (it->is_symlink(entryEc) || !it->is_regular_file(entryEc))

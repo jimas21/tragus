@@ -60,7 +60,9 @@ namespace MagicPodsCore
             return;
         }
 
-        const auto value = notification.GetValue();
+        // Read the current value rather than the event's copy (Tragus): two threads saving
+        // the same setting may deliver their events in either order.
+        const auto value = _settingsService->GetSetting(GlobalSettingsContainer, std::string{settingName});
         if (!value.is_boolean())
         {
             Logger::Error("Global microphone setting %s must be boolean",

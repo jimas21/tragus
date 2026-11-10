@@ -86,7 +86,7 @@ jobs:
           sh -n frame/uninstall.sh
           for f in frame/Install-Tragus.desktop frame/Uninstall-Tragus.desktop; do
             grep -qF "Exec=konsole --hold -e python3 -I -c \"import urllib.request as u; exec(u.urlopen('https://github.com/jimas21/tragus/releases/latest/download/magicpods-frame-install.py', timeout=60).read())\"" "$f"
-            ! grep -q '/tmp' "$f"
+            if grep -q '/tmp' "$f"; then echo "::error::$f mentions /tmp"; exit 1; fi
           done
 
       # The MagicPods menu for Steam's VR UI (menu/), released beside the build.
