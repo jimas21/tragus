@@ -556,7 +556,7 @@ jobs:
           } > notes.md
           cat notes.md
           gh release create "${TAG}" --repo "${REPO}" --draft --verify-tag \
-            --title "${TAG} (linux-arm64)" --notes-file notes.md \
+            --title "Tragus ${TAG}" --notes-file notes.md \
             "${DIST_NAME}.tar.gz" "${DIST_NAME}.tar.gz.sha256" "${DIST_NAME}.tar.gz.sig" \
             "${DIST_NAME}-source.tar.gz" "${DIST_NAME}-source.tar.gz.sha256" \
             "${MENU_NAME}.tar.gz" "${MENU_NAME}.tar.gz.sha256" "${MENU_NAME}.tar.gz.sig" \
