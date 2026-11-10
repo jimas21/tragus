@@ -468,7 +468,7 @@ jobs:
             echo "- \`${DIST_NAME}-source.tar.gz\`: corresponding source (this commit, the dependency"
             echo "  sources CMake fetched, and the FFmpeg release tarball)"
             echo
-            echo "Install: unpack, then run `./magicpodscore-linux-arm64/install.sh` (see README.md and docs/FRAME.md)."
+            echo "Install: unpack, then run \`./magicpodscore-linux-arm64/install.sh\` (see README.md and docs/FRAME.md)."
             echo "License: GPL-3.0 (MagicPodsCore), LGPL-2.1-or-later (bundled FFmpeg libraries)."
           } > notes.md
           cat notes.md
