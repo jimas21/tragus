@@ -113,6 +113,11 @@ namespace MagicPodsCore
             auto* self = static_cast<PulseAudioClient*>(userdata);
             auto facility = t & PA_SUBSCRIPTION_EVENT_FACILITY_MASK;
             auto type     = t & PA_SUBSCRIPTION_EVENT_TYPE_MASK;
+            if (facility == PA_SUBSCRIPTION_EVENT_SINK) {
+                if (type == PA_SUBSCRIPTION_EVENT_NEW)
+                    self->_onAudioSinkAddedEvent.FireEvent(idx);
+                return;
+            }
             if (facility == PA_SUBSCRIPTION_EVENT_CARD) {
 
                 pa_context_get_card_info_by_index(
@@ -146,7 +151,7 @@ namespace MagicPodsCore
 
             }
         }, this);
-        pa_context_subscribe(ctx, static_cast<pa_subscription_mask_t>(PA_SUBSCRIPTION_MASK_CARD), nullptr, nullptr);
+        pa_context_subscribe(ctx, static_cast<pa_subscription_mask_t>(PA_SUBSCRIPTION_MASK_CARD | PA_SUBSCRIPTION_MASK_SINK), nullptr, nullptr);
 
         th = std::thread(&PulseAudioClient::MainLoop, this);
     }

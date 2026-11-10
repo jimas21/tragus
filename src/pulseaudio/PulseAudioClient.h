@@ -75,8 +75,13 @@ namespace MagicPodsCore{
             Event<CardInfo>& GatAudioCardPropertyChangedEvent() {
                 return _onAudioCardPropertyChangedEvent;
             }
+            // Fired with the sink index when an audio output appears (e.g. a Bluetooth A2DP sink).
+            Event<uint32_t>& GetAudioSinkAddedEvent() {
+                return _onAudioSinkAddedEvent;
+            }
         private:
             Event<CardInfo> _onAudioCardPropertyChangedEvent{};
+            Event<uint32_t> _onAudioSinkAddedEvent{};
             std::atomic<bool> ready{false};
             std::atomic<bool> stop{false};
             std::thread th;

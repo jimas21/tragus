@@ -56,23 +56,51 @@ namespace MagicPodsCore
         if (!LoadSwitchToSpeakersSetting())
             return;
 
+        bool headphonesAreWorn = option.Status == DeviceEarStatus::Worn ||
+                                 option.Status == DeviceEarStatus::PartiallyWorn;
+
+        auto audioClient = device.GetAudioClient();
+        auto card = audioClient->GetCardInfoByName(audioClient->GetNameFromMac(device.GetAddress()));
+        if (!card.has_value() || !card->IsA2dpPlayback())
+        {
+            // Not ready yet (typical right after the headphones reconnect): retry when it is.
+            pendingSwitchToCard.store(headphonesAreWorn);
+            return;
+        }
+
+        if (option.Status == DeviceEarStatus::NotWorn)
+        {
+            pendingSwitchToCard.store(false);
+            audioClient->SwitchCardToSpeakers(card.value());
+            return;
+        }
+
+        if (!headphonesAreWorn)
+            return;
+
+        pendingSwitchToCard.store(!audioClient->SwitchToCard(card.value()));
+    }
+
+    void AapEarDetectionCapability::RetryPendingSwitchToCard()
+    {
+        if (!pendingSwitchToCard.load() || !LoadSwitchToSpeakersSetting())
+            return;
+        if (option.Status != DeviceEarStatus::Worn && option.Status != DeviceEarStatus::PartiallyWorn)
+        {
+            pendingSwitchToCard.store(false);
+            return;
+        }
+
         auto audioClient = device.GetAudioClient();
         auto card = audioClient->GetCardInfoByName(audioClient->GetNameFromMac(device.GetAddress()));
         if (!card.has_value() || !card->IsA2dpPlayback())
             return;
 
-        if (option.Status == DeviceEarStatus::NotWorn)
+        if (audioClient->SwitchToCard(card.value()))
         {
-            audioClient->SwitchCardToSpeakers(card.value());
-            return;
+            pendingSwitchToCard.store(false);
+            Logger::Info("Audio output switched back to the headphones after they reconnected");
         }
-
-        bool headphonesAreWorn = option.Status == DeviceEarStatus::Worn ||
-                                 option.Status == DeviceEarStatus::PartiallyWorn;
-        if (!headphonesAreWorn)
-            return;
-
-        audioClient->SwitchToCard(card.value());
     }
 
     void AapEarDetectionCapability::TriggerMediaControl(DeviceEarStatus previousStatus)
@@ -156,11 +184,20 @@ namespace MagicPodsCore
             }
         });
 
+        sinkAddedEventId = device.GetAudioClient()->GetAudioSinkAddedEvent().Subscribe([this](size_t id, const uint32_t& index){
+            RetryPendingSwitchToCard();
+        });
+        cardChangedEventId = device.GetAudioClient()->GatAudioCardPropertyChangedEvent().Subscribe([this](size_t id, const CardInfo& info){
+            if (info.name == this->device.GetAudioClient()->GetNameFromMac(this->device.GetAddress()))
+                RetryPendingSwitchToCard();
+        });
     }
 
     AapEarDetectionCapability::~AapEarDetectionCapability()
     {
         watcher.GetEvent().Unsubscribe(watcherEventId);
+        device.GetAudioClient()->GetAudioSinkAddedEvent().Unsubscribe(sinkAddedEventId);
+        device.GetAudioClient()->GatAudioCardPropertyChangedEvent().Unsubscribe(cardChangedEventId);
     }
 
     void AapEarDetectionCapability::SetFromJson(const nlohmann::json &json)

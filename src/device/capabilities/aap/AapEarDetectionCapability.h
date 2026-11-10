@@ -3,6 +3,7 @@
 // License: GPL-3.0
 
 #pragma once
+#include <atomic>
 #include "AapCapability.h"
 #include "sdk/aap/watchers/AapEarDetectionWatcher.h"
 #include "device/structs/DeviceEarDetectionData.h"
@@ -15,6 +16,12 @@ namespace MagicPodsCore
         DeviceEarDetectionData option;
         AapEarDetectionWatcher watcher{};
         size_t watcherEventId;
+        size_t sinkAddedEventId{};
+        size_t cardChangedEventId{};
+        // Worn, but the headphones' audio output did not exist yet (e.g. right after they
+        // reconnect): switch to it as soon as it appears.
+        std::atomic<bool> pendingSwitchToCard{false};
+        void RetryPendingSwitchToCard();
         void TriggerMediaControl(DeviceEarStatus previousStatus);
         void TriggerAudioOutputSwitch();
         void TriggerVolumeControl(DeviceEarStatus previousStatus);
