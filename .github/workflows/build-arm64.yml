@@ -23,6 +23,7 @@ on:
       - 'config/**'
       - 'CMakeLists.txt'
       - 'frame/**'
+      - 'menu/**'
       - '.github/workflows/build-arm64.yml'
 
 permissions:
@@ -61,6 +62,7 @@ env:
     --disable-swresample
     --disable-swscale
   DIST_NAME: magicpodscore-linux-arm64
+  MENU_NAME: magicpods-frame-menu
 
 jobs:
   build:
@@ -85,6 +87,17 @@ jobs:
           for f in frame/Install-MagicPods.desktop frame/Uninstall-MagicPods.desktop; do
             grep -q '^Exec=konsole --hold -e sh -c "curl -fsSL https://github.com/jimas21/MagicPodsCore/releases/latest/download/magicpods-frame-install.py' "$f"
           done
+
+      # The MagicPods menu for Steam's VR UI (menu/), released beside the build.
+      - name: Check the menu
+        run: |
+          node --check menu/magicpods-menu.js
+          python3 -m py_compile menu/magicpods-steamui.py
+          sh -n menu/install.sh
+          sh -n menu/uninstall.sh
+          if LC_ALL=C grep -nP '[\x00-\x08\x0b\x0c\x0e-\x1f]' menu/magicpods-menu.js menu/magicpods-steamui.py; then
+            echo "::error::control characters in the menu files"; exit 1
+          fi
 
       # Package list is the Dockerfile's, minus nasm (x86 only), doxygen and graphviz
       # (CMakeLists.txt does not use them; sdbus-c++ v1.6.0 only runs doxygen when
@@ -424,18 +437,59 @@ jobs:
           name: magicpodscore-linux-arm64-source
           path: out
 
+      # The installer, its Desktop Mode launchers and the menu, published beside the
+      # build so that releases/latest/download/<name> always finds them.
+      - name: Check out the installer and the menu
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: src
+          sparse-checkout: |
+            frame
+            menu
+          persist-credentials: false
+
+      - name: Package the menu
+        env:
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          d="menu-dist/${MENU_NAME}"
+          rm -rf menu-dist && mkdir -p "${d}"
+          cp src/menu/magicpods-menu.js src/menu/magicpods-steamui.py src/menu/magicpods-steamui.service \
+             src/menu/install.sh src/menu/uninstall.sh src/menu/README.md src/LICENSE "${d}/"
+          chmod 755 "${d}/install.sh" "${d}/uninstall.sh" "${d}/magicpods-steamui.py"
+          chmod 644 "${d}/magicpods-menu.js" "${d}/magicpods-steamui.service" "${d}/README.md" "${d}/LICENSE"
+          {
+            echo "MagicPods menu for Steam's VR UI, ${TAG}"
+            echo
+            echo "License: GNU GPL v3 (see LICENSE). These files are their own source code."
+            echo "  repository: ${SERVER_URL}/${REPOSITORY}"
+            echo "  commit:     ${COMMIT_SHA}"
+            echo "  tree:       ${SERVER_URL}/${REPOSITORY}/tree/${COMMIT_SHA}/menu"
+            echo "Based on MagicPods for Linux and MagicPods for Decky (GPL-3.0):"
+            echo "  https://github.com/steam3d/MagicPodsLinux"
+            echo "  https://github.com/steam3d/MagicPodsDecky"
+          } > "${d}/SOURCE.txt"
+          tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$(git -C src log -1 --format=%ct)" \
+              -C menu-dist -czf "out/${MENU_NAME}.tar.gz" "${MENU_NAME}"
+          (cd out && sha256sum "${MENU_NAME}.tar.gz" > "${MENU_NAME}.tar.gz.sha256")
+          cat "out/${MENU_NAME}.tar.gz.sha256"
+          tar -tzvf "out/${MENU_NAME}.tar.gz"
+
       # ed25519 signature over the exact tarball bytes, for clients that install
       # updates automatically. The seed is the MP_RELEASE_KEY secret (a '#' comment
       # line, then base64 of the 32-byte seed); the matching public key is pinned
       # here and checked, so a wrong or rotated secret fails the job.
-      - name: Sign the tarball
+      - name: Sign the tarballs
         env:
           MP_RELEASE_KEY: ${{ secrets.MP_RELEASE_KEY }}
           MP_RELEASE_PUBKEY: 'GOT1qW3jXgAMmr3pyoQece9CnIIrNlgiZysjnNC/Hdk='
         run: |
           python3 -m venv "${RUNNER_TEMP}/sign"
           "${RUNNER_TEMP}/sign/bin/pip" install --quiet 'cryptography==44.0.0'
-          "${RUNNER_TEMP}/sign/bin/python" - "out/${DIST_NAME}.tar.gz" <<'PY'
+          "${RUNNER_TEMP}/sign/bin/python" - "out/${DIST_NAME}.tar.gz" "out/${MENU_NAME}.tar.gz" <<'PY'
           import base64, os, sys
           from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
           from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -450,25 +504,17 @@ jobs:
           pub = key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
           if base64.b64encode(pub).decode() != os.environ["MP_RELEASE_PUBKEY"]:
               sys.exit("MP_RELEASE_KEY does not match the pinned public key")
-          path = sys.argv[1]
-          data = open(path, "rb").read()
-          sig = key.sign(data)
-          Ed25519PublicKey.from_public_bytes(base64.b64decode(os.environ["MP_RELEASE_PUBKEY"])).verify(sig, data)
-          with open(path + ".sig", "w") as out:
-              out.write(base64.b64encode(sig).decode())
-              out.write(chr(10))
-          print("signed", path, "and verified with the pinned public key")
+          for path in sys.argv[1:]:
+              data = open(path, "rb").read()
+              sig = key.sign(data)
+              Ed25519PublicKey.from_public_bytes(base64.b64decode(os.environ["MP_RELEASE_PUBKEY"])).verify(sig, data)
+              with open(path + ".sig", "w") as out:
+                  out.write(base64.b64encode(sig).decode())
+                  out.write(chr(10))
+              print("signed", path, "and verified with the pinned public key")
           PY
-          cat "out/${DIST_NAME}.tar.gz.sig"
+          cat "out/${DIST_NAME}.tar.gz.sig" "out/${MENU_NAME}.tar.gz.sig"
 
-      # The one-click installer and its Desktop Mode launchers, published beside the
-      # build so that releases/latest/download/<name> always finds them.
-      - name: Check out the installer
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          path: src
-          sparse-checkout: frame
-          persist-credentials: false
 
       - name: Add the installer
         run: |
@@ -488,7 +534,7 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           cd out
-          sha256sum -c "${DIST_NAME}.tar.gz.sha256" "${DIST_NAME}-source.tar.gz.sha256"
+          sha256sum -c "${DIST_NAME}.tar.gz.sha256" "${DIST_NAME}-source.tar.gz.sha256" "${MENU_NAME}.tar.gz.sha256"
           bin_sha="$(cut -d' ' -f1 "${DIST_NAME}.tar.gz.sha256")"
           {
             echo "Unofficial linux-arm64 build of MagicPodsCore for ARM64 SteamOS devices,"
@@ -499,9 +545,10 @@ jobs:
             echo "- \`${DIST_NAME}-source.tar.gz\`: corresponding source (this commit, the dependency"
             echo "  sources CMake fetched, and the FFmpeg release tarball)"
             echo
+            echo "- \`${MENU_NAME}.tar.gz\`: the MagicPods menu for Steam's VR UI (signed the same way)"
             echo "- \`Install-MagicPods.desktop\`: one-click install or update on a Steam Frame, in Desktop Mode."
-            echo "  It runs \`magicpods-frame-install.py\`, which downloads the latest MagicPodsCore and"
-            echo "  MagicPods menu releases, checks their signatures and installs both."
+            echo "  It runs \`magicpods-frame-install.py\`, which downloads MagicPodsCore and the menu from"
+            echo "  the latest release, checks their signatures and installs both."
             echo "  \`Uninstall-MagicPods.desktop\` removes them (settings kept). Hashes in \`installer.sha256\`."
             echo
             echo "Install: see ${SERVER_URL}/${REPO}#install"
@@ -512,4 +559,5 @@ jobs:
             --title "${TAG} (linux-arm64)" --notes-file notes.md \
             "${DIST_NAME}.tar.gz" "${DIST_NAME}.tar.gz.sha256" "${DIST_NAME}.tar.gz.sig" \
             "${DIST_NAME}-source.tar.gz" "${DIST_NAME}-source.tar.gz.sha256" \
+            "${MENU_NAME}.tar.gz" "${MENU_NAME}.tar.gz.sha256" "${MENU_NAME}.tar.gz.sig" \
             magicpods-frame-install.py Install-MagicPods.desktop Uninstall-MagicPods.desktop installer.sha256

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Install, update or remove MagicPods on a Steam Frame, for the current user. No root.
 
-Downloads the latest signed releases of
-  MagicPodsCore           https://github.com/jimas21/MagicPodsCore
-  the MagicPods menu      https://github.com/jimas21/MagicPodsLinux
+Downloads MagicPodsCore and the MagicPods menu from the latest release of
+  https://github.com/jimas21/MagicPodsCore
 checks each one's ed25519 signature against the public key pinned below, unpacks it
 safely and runs its own install.sh. Your headphone settings are never overwritten.
 
@@ -36,21 +35,26 @@ import urllib.request
 USER_AGENT = "magicpods-frame-install"
 MAX_DOWNLOAD = 64 * 1024 * 1024
 
+REPO = "jimas21/MagicPodsCore"
+PUBKEY = "GOT1qW3jXgAMmr3pyoQece9CnIIrNlgiZysjnNC/Hdk="
+
 COMPONENTS = [
     {
+        "key": "core",
         "name": "MagicPodsCore",
-        "repo": "jimas21/MagicPodsCore",
+        "repo": REPO,
         "asset": "magicpodscore-linux-arm64.tar.gz",
         "top": "magicpodscore-linux-arm64",
-        "pubkey": "GOT1qW3jXgAMmr3pyoQece9CnIIrNlgiZysjnNC/Hdk=",
+        "pubkey": PUBKEY,
         "uninstall": "~/.local/share/magicpodscore/uninstall.sh",
     },
     {
+        "key": "menu",
         "name": "MagicPods menu",
-        "repo": "jimas21/MagicPodsLinux",
+        "repo": REPO,
         "asset": "magicpods-frame-menu.tar.gz",
         "top": "magicpods-frame-menu",
-        "pubkey": "jcgo8/3boB/B09Ac6pu26NTvNDBpfdY/yh9blxGIfuw=",
+        "pubkey": PUBKEY,
         "uninstall": "~/.local/share/magicpods-app/frame/uninstall.sh",
     },
 ]
@@ -342,14 +346,15 @@ def install(args, status):
         raise InstallError("systemctl was not found; this installer needs SteamOS")
     lock = None if args.download_only else take_lock()
     status.set("checking", "Checking for updates...")
-    tags = {c["repo"]: latest_tag(c) for c in COMPONENTS}
+    tag = latest_tag(COMPONENTS[0])  # one release holds both parts
+    tags = {c["key"]: tag for c in COMPONENTS}
     installed = read_versions()
     todo = COMPONENTS
     if args.if_newer:
         # Only what changed, and never an older release than the one installed.
         todo = [c for c in COMPONENTS
-                if installed.get(c["repo"]) != tags[c["repo"]]
-                and version_key(tags[c["repo"]]) > version_key(installed.get(c["repo"]) or "")]
+                if installed.get(c["key"]) != tags[c["key"]]
+                and version_key(tags[c["key"]]) > version_key(installed.get(c["key"]) or "")]
         if not todo:
             print("MagicPods is up to date.")
             status.set("uptodate", "Up to date")
@@ -362,7 +367,7 @@ def install(args, status):
         os.makedirs(parent, exist_ok=True)
     status.set("updating", "Updating...")
     with tempfile.TemporaryDirectory(prefix="magicpods-install-", dir=parent) as work:
-        roots = [download_component(c, work, tags[c["repo"]]) for c in todo]
+        roots = [download_component(c, work, tags[c["key"]]) for c in todo]
         if args.download_only:
             for c, root in zip(todo, roots):
                 keep = os.path.join(args.download_only, c["top"])
@@ -375,9 +380,9 @@ def install(args, status):
             r = subprocess.run(["sh", os.path.join(root, "install.sh")], env=clean_env())
             if r.returncode != 0:
                 raise InstallError(f"{c['name']} did not install (install.sh exited {r.returncode})")
-            installed[c["repo"]] = tags[c["repo"]]
+            installed[c["key"]] = tags[c["key"]]
             write_versions(installed)
-    status.set("updated", "Updated: " + ", ".join(f"{c['name']} {tags[c['repo']]}" for c in todo))
+    status.set("updated", f"Updated to {tag}")
     if lock:
         lock.close()
     print()

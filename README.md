@@ -5,14 +5,13 @@ for each earbud and the case, noise control, ear detection (pause when you take 
 switch to the headset speakers when both are out) and the headphones' own settings, all
 from a menu inside the Frame's VR interface.
 
-This repository is **MagicPodsCore for Steam Frame**, the background service that talks
-to the headphones. It is a fork of [MagicPodsCore](https://github.com/steam3d/MagicPodsCore)
-by **[Aleksandr Maslov](https://github.com/steam3d) and
-[Andrey Litvintsev](https://github.com/andreylitvintsev)**, the authors of
-[MagicPods](https://magicpods.app). All the headphone support is their work; this fork
-adds what the Frame needs. The menu lives in its sister repository,
-[jimas21/MagicPodsLinux](https://github.com/jimas21/MagicPodsLinux), and the one-click
-installer below sets up both.
+It is built on [MagicPods](https://magicpods.app) by
+**[Aleksandr Maslov](https://github.com/steam3d) and
+[Andrey Litvintsev](https://github.com/andreylitvintsev)**. All the headphone support is
+their work; this project adds what the Frame needs. Everything is in this one repository:
+the background service that talks to the headphones (a fork of their
+[MagicPodsCore](https://github.com/steam3d/MagicPodsCore)), the menu in Steam's VR
+interface, and the installer.
 
 Licence: GPL-3.0, the same as the original.
 
@@ -63,25 +62,24 @@ Features depend on the model.
 
 ## For developers
 
-This fork keeps the original code and adds what the Frame needs:
+| Folder | What it is |
+|---|---|
+| `src/` | MagicPodsCore, the background service (C++), with fixes for the Frame's audio. |
+| `menu/` | The menu in Steam's VR interface and its small helper service. [Details](menu/README.md). |
+| `frame/` | The install button, the installer script it runs, and the service setup. [Details](docs/FRAME.md). |
 
-- Builds for the Frame, made on GitHub for every release.
-- The install button and the script it runs (in `frame/`).
-- Audio fixes for the Frame: switching to the speakers when you take the earbuds out,
-  and back when you put them in.
-
-Everything is on the `frame-arm64` branch. Pushing a tag like `2.0.12-frame.8` builds a
-release. How the install works: [docs/FRAME.md](docs/FRAME.md). The original README is in
-[docs/UPSTREAM-README.md](docs/UPSTREAM-README.md).
+Everything is on the `frame-arm64` branch. Pushing a tag like `2.0.12-frame.9` builds the
+service and the menu and makes one release with both. The original MagicPodsCore README is
+in [docs/UPSTREAM-README.md](docs/UPSTREAM-README.md).
 
 ## Credits and licence
 
 - **[MagicPods](https://magicpods.app)** by [Aleksandr Maslov](https://github.com/steam3d)
   and [Andrey Litvintsev](https://github.com/andreylitvintsev):
   [MagicPodsCore](https://github.com/steam3d/MagicPodsCore) (forked here),
-  [MagicPods for Linux](https://github.com/steam3d/MagicPodsLinux) (forked for the menu)
-  and [MagicPods for Decky](https://github.com/steam3d/MagicPodsDecky) (the menu's
-  design, behaviour and noise-mode icons follow it). If MagicPods is useful to you,
+  [MagicPods for Linux](https://github.com/steam3d/MagicPodsLinux) (where the menu
+  started) and [MagicPods for Decky](https://github.com/steam3d/MagicPodsDecky) (the
+  menu's design, behaviour and noise-mode icons follow it). If MagicPods is useful to you,
   consider [supporting the original project](https://magicpods.app/donate/).
-- This fork: GPL-3.0, like the original (see [LICENSE](LICENSE)). It includes parts of
+- This project: GPL-3.0, like the original (see [LICENSE](LICENSE)). It includes parts of
   FFmpeg (LGPL-2.1); each release comes with the full source.

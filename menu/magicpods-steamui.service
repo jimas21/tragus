@@ -1,0 +1,22 @@
+# Puts the MagicPods menu into Steam's VR UI: an earbuds battery indicator in the top
+# bar and a MagicPods tab in the quick-access popup. Installed by install.sh.
+[Unit]
+Description=MagicPods menu in Steam's VR UI
+After=magicpodscore.service
+Wants=magicpodscore.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -I "%h/.local/share/magicpods-app/frame/magicpods-steamui.py"
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+LockPersonality=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SyslogIdentifier=magicpods-steamui
+
+[Install]
+WantedBy=default.target
