@@ -5,18 +5,22 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <toml++/toml.h>
+#include "SettingValue.h"
 
 namespace MagicPodsCore {
 
+// Owns copies of the names and the value (Tragus): listeners run after the settings lock
+// is released, so they must not point into the live settings table.
 struct UpdatedSettingNotification {
 private:
-    std::string_view _containerName;
-    std::string_view _settingName;
-    toml::node_view<toml::node> _value;
+    std::string _containerName;
+    std::string _settingName;
+    SettingValue _value;
 
 public:
-    UpdatedSettingNotification(std::string_view containerName, std::string_view settingName, toml::node_view<toml::node> value) 
+    UpdatedSettingNotification(std::string_view containerName, std::string_view settingName, toml::node_view<toml::node> value)
     : _containerName(containerName), _settingName(settingName), _value(value) {}
 
     std::string_view GetContainerName() const {
@@ -27,8 +31,9 @@ public:
         return _settingName;
     }
 
+    // Valid while this notification lives (listeners get it by reference).
     toml::node_view<toml::node> GetValue() const {
-        return _value;
+        return _value.view();
     }
 };
 

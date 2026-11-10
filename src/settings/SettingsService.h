@@ -5,11 +5,14 @@
 #pragma once
 
 #include <map>
+#include <mutex>
 #include <optional>
+#include <vector>
 #include <string>
 #include <type_traits>
 #include <toml++/toml.h>
 #include "Event.h"
+#include "SettingValue.h"
 #include "UpdatedSettingNotification.h"
 
 namespace MagicPodsCore {
@@ -19,9 +22,15 @@ private:
     toml::table _settings{};
     std::string _filePath;
     Event<UpdatedSettingNotification> _onSettingUpdate{};
+    // Tragus: settings are read and saved from several threads (WebSocket loop, device
+    // reader, BLE). Every access to _settings and every file write holds this lock;
+    // change events fire after it is released, with their own copy of the value.
+    mutable std::recursive_mutex _mutex;
 
     void LoadFromFile();
     void WriteToFile();
+    void RemoveStaleTempFiles();
+    void Fire(const std::vector<UpdatedSettingNotification>& notifications);
     static toml::table GetDefaults();
 
     static void MergeDefaults(toml::table& settings, const toml::table& defaults) {
@@ -44,10 +53,11 @@ private:
 
 public:
     SettingsService(const std::string& filePath);
-    const toml::table& GetSettingsAll();
+    // All getters return copies (Tragus), safe to use while other threads save.
+    toml::table GetSettingsAll();
     toml::table GetSettingsAllWrapped();
-    const toml::table& GetSettings(const std::string& container);
-    toml::node_view<toml::node> GetSetting(const std::string& container, const std::string& name);
+    toml::table GetSettings(const std::string& container);
+    SettingValue GetSetting(const std::string& container, const std::string& name);
 
     void SaveSettings(const toml::table& table);
 
@@ -66,16 +76,19 @@ public:
 
 template<typename T>
 void SettingsService::SaveSetting(const std::string& container, const std::string& name, T&& value) {
-    auto containerTable = _settings[container].as_table();
-    if (!containerTable) {
-        _settings.insert_or_assign(container, toml::table{});
-        containerTable = _settings[container].as_table();
+    std::vector<UpdatedSettingNotification> notifications;
+    {
+        std::lock_guard<std::recursive_mutex> lock(_mutex);
+        auto containerTable = _settings[container].as_table();
+        if (!containerTable) {
+            _settings.insert_or_assign(container, toml::table{});
+            containerTable = _settings[container].as_table();
+        }
+        containerTable->insert_or_assign(name, std::forward<T>(value));
+        WriteToFile();
+        notifications.emplace_back(container, name, (*containerTable)[name]);
     }
-    containerTable->insert_or_assign(name, std::forward<T>(value));
-    WriteToFile();
-
-    auto savedValue = (*containerTable)[name];
-    _onSettingUpdate.FireEvent(UpdatedSettingNotification{container, name, savedValue});
+    Fire(notifications);
 }
 
 }

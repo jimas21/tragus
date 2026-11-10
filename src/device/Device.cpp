@@ -237,7 +237,7 @@ namespace MagicPodsCore {
 
     std::optional<std::string> Device::LoadSettingString(const std::string &settingName)
     {
-        toml::node_view<toml::node> value = _settingsService->GetSetting(GetContainerName(), settingName);
+        const auto value = _settingsService->GetSetting(GetContainerName(), settingName);
         if (auto v = value.as_string())
             return v->get();
 
@@ -251,7 +251,7 @@ namespace MagicPodsCore {
 
     std::optional<int64_t> Device::LoadSettingInt(const std::string &settingName)
     {
-        toml::node_view<toml::node> value = _settingsService->GetSetting(GetContainerName(), settingName);
+        const auto value = _settingsService->GetSetting(GetContainerName(), settingName);
         if (auto v = value.as_integer())
             return v->get();
 
@@ -265,7 +265,7 @@ namespace MagicPodsCore {
 
     std::optional<bool> Device::LoadSettingBool(const std::string &settingName)
     {
-        toml::node_view<toml::node> value = _settingsService->GetSetting(GetContainerName(), settingName);
+        const auto value = _settingsService->GetSetting(GetContainerName(), settingName);
         if (auto v = value.as_boolean())
             return v->get();
 

@@ -23,7 +23,7 @@ namespace MagicPodsCore {
 
     void DevicesInfoFetcher::UpdateBleState()
     {
-        toml::v3::node_view<toml::v3::node> settingValue = _settingsService->GetSetting("magicpods", "animation");
+        const auto settingValue = _settingsService->GetSetting("magicpods", "animation");
 
         if (settingValue.is_boolean()){
             bool value = settingValue.as_boolean()->get();

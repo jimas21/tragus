@@ -196,7 +196,7 @@
       `<rect x="3" y="${5 + 20 - h}" width="10" height="${h}" fill="${color}"/>` +
       (c.charging ? '<path transform="translate(4.5 10)" d="M0 6.25L3.5 0V3.75H7L3.5 10V6.25H0Z" fill="white"/>' : '') + '</svg>';
   }
-  const HD_MIC_HELP = "Provides significantly better audio and microphone quality than Bluetooth Hands-Free (headset) mode. However, audio playback quality is still noticeably lower than in regular headphone mode.\n\nWhen enabled, the \"MagicPods Virtual Mic\" audio input device is automatically created and selected. When disabled, audio transmission stops and the device is removed.\n\nIf the microphone isn't working, make sure \"MagicPods Virtual Mic\" is selected as the audio input device.\n\nDisable \"Conversation Awareness\" in your headphones' settings to prevent the volume from automatically decreasing while using the microphone.";
+  const HD_MIC_HELP = "Provides significantly better audio and microphone quality than Bluetooth Hands-Free (headset) mode. However, audio playback quality is still noticeably lower than in regular headphone mode.\n\nWhen enabled, the \"Tragus Virtual Mic\" audio input device is automatically created and selected. When disabled, audio transmission stops and the device is removed.\n\nIf the microphone isn't working, make sure \"Tragus Virtual Mic\" is selected as the audio input device.\n\nDisable \"Conversation Awareness\" in your headphones' settings to prevent the volume from automatically decreasing while using the microphone.";
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
   // ---------- styles ----------

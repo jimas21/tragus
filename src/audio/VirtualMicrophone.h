@@ -44,7 +44,7 @@ namespace MagicPodsCore
 
     public:
         static constexpr auto SourceName = "MagicPodsVirtualMic";
-        static constexpr auto Description = "MagicPods Virtual Mic";
+        static constexpr auto Description = "Tragus Virtual Mic";
 
         VirtualMicrophone(std::shared_ptr<PulseAudioClient> audioClient, uint32_t sampleRate, uint8_t channels);
         ~VirtualMicrophone();

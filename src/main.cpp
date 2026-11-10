@@ -76,7 +76,7 @@ nlohmann::json MakeGetSettingResponse(SettingsService& settingsService, const st
     auto wrappedJson = nlohmann::json::object();
     wrappedJson["settings"] = nlohmann::json::object();
     wrappedJson["settings"][container] = nlohmann::json::object();
-    wrappedJson["settings"][container][setting] = TomlNodeViewToJson(settingValue);
+    wrappedJson["settings"][container][setting] = TomlNodeViewToJson(settingValue.view());
 
     return wrappedJson;
 }

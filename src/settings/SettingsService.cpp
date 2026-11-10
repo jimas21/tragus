@@ -12,6 +12,8 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
+#include <vector>
 
 #include <fcntl.h>
 #include <sys/types.h>
@@ -22,6 +24,8 @@
 namespace MagicPodsCore {
 
 SettingsService::SettingsService(const std::string& filePath) : _filePath(filePath), _onSettingUpdate{} {
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
+    RemoveStaleTempFiles();
     LoadFromFile();
     MergeDefaults(_settings, GetDefaults());
     WriteToFile();
@@ -103,6 +107,37 @@ void SettingsService::WriteToFile() {
     }
 }
 
+// A crash between mkstemp and rename leaves "<config>.XXXXXX" behind. Remove such files
+// once they are clearly abandoned (older than 10 minutes), so a second copy starting
+// up never deletes the file the running one is writing right now.
+void SettingsService::RemoveStaleTempFiles() {
+    std::error_code ec;
+    std::filesystem::path target(_filePath);
+    if (std::filesystem::is_symlink(target, ec))
+        target = std::filesystem::weakly_canonical(target, ec);
+    const std::filesystem::path dir = target.parent_path();
+    const std::string prefix = target.filename().string() + ".";
+    const auto cutoff = std::filesystem::file_time_type::clock::now() - std::chrono::minutes(10);
+    for (std::filesystem::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
+        const std::string name = it->path().filename().string();
+        if (name.size() != prefix.size() + 6 || name.compare(0, prefix.size(), prefix) != 0)
+            continue;
+        std::error_code entryEc;
+        if (it->is_symlink(entryEc) || !it->is_regular_file(entryEc))
+            continue;
+        const auto modified = std::filesystem::last_write_time(it->path(), entryEc);
+        if (entryEc || modified > cutoff)
+            continue;
+        if (std::filesystem::remove(it->path(), entryEc))
+            Logger::Info("Removed leftover settings file %s", name.c_str());
+    }
+}
+
+void SettingsService::Fire(const std::vector<UpdatedSettingNotification>& notifications) {
+    for (const auto& notification : notifications)
+        _onSettingUpdate.FireEvent(notification);
+}
+
 toml::table SettingsService::GetDefaults() {
     toml::table magicpods{};
     magicpods.insert_or_assign("animation", true);
@@ -116,31 +151,34 @@ toml::table SettingsService::GetDefaults() {
     return defaults;
 }
 
-const toml::table& SettingsService::GetSettingsAll() {
+toml::table SettingsService::GetSettingsAll() {
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
     return _settings;
 }
 
 toml::table SettingsService::GetSettingsAllWrapped() {
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
     toml::table wrapped;
     wrapped.insert_or_assign("settings", _settings);
     return wrapped;
 }
 
-const toml::table& SettingsService::GetSettings(const std::string& container) {
+toml::table SettingsService::GetSettings(const std::string& container) {
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
     auto containerTable = _settings[container].as_table();
     if (!containerTable) {
-        _settings.insert_or_assign(container, toml::table{});
-        containerTable = _settings[container].as_table();
+        return toml::table{};
     }
     return *containerTable;
 }
 
-toml::node_view<toml::node> SettingsService::GetSetting(const std::string& container, const std::string& name) {
+SettingValue SettingsService::GetSetting(const std::string& container, const std::string& name) {
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
     auto containerTable = _settings[container].as_table();
     if (!containerTable) {
-        return toml::node_view<toml::node>{};
+        return SettingValue{};
     }
-    return (*containerTable)[name];
+    return SettingValue{(*containerTable)[name]};
 }
 
 void SettingsService::SaveSettings(const toml::table& table) {
@@ -148,6 +186,10 @@ void SettingsService::SaveSettings(const toml::table& table) {
     if (!settingsRoot) {
         throw std::invalid_argument("Table must contain 'settings' root key");
     }
+
+    std::vector<UpdatedSettingNotification> notifications;
+    {
+    std::lock_guard<std::recursive_mutex> lock(_mutex);
 
     for (const auto& [containerName, containerData] : *settingsRoot) {
         if (auto incomingContainer = containerData.as_table()) {
@@ -169,38 +211,45 @@ void SettingsService::SaveSettings(const toml::table& table) {
         if (auto incomingContainer = containerData.as_table()) {
             auto existingContainer = _settings[containerName].as_table();
             for (const auto& [key, value] : *incomingContainer) {
-                auto savedValue = (*existingContainer)[key];
-                _onSettingUpdate.FireEvent(UpdatedSettingNotification{containerName, key, savedValue});
+                notifications.emplace_back(containerName.str(), key.str(), (*existingContainer)[key]);
             }
         }
     }
+    }
+    Fire(notifications);
 }
 
 void SettingsService::SaveSetting(const std::string& container, const std::string& name, const toml::node& value) {
-    auto containerTable = _settings[container].as_table();
-    if (!containerTable) {
-        _settings.insert_or_assign(container, toml::table{});
-        containerTable = _settings[container].as_table();
-    }
-    containerTable->insert_or_assign(name, value);
-    WriteToFile();
-
-    auto savedValue = (*containerTable)[name];
-    _onSettingUpdate.FireEvent(UpdatedSettingNotification{container, name, savedValue});
-}
-
-void SettingsService::SaveSetting(const std::string& container, const std::string& name, const toml::node_view<const toml::node>& value) {
-    if (value) {
+    std::vector<UpdatedSettingNotification> notifications;
+    {
+        std::lock_guard<std::recursive_mutex> lock(_mutex);
         auto containerTable = _settings[container].as_table();
         if (!containerTable) {
             _settings.insert_or_assign(container, toml::table{});
             containerTable = _settings[container].as_table();
         }
-        containerTable->insert_or_assign(name, *value.node());
+        containerTable->insert_or_assign(name, value);
         WriteToFile();
+        notifications.emplace_back(container, name, (*containerTable)[name]);
+    }
+    Fire(notifications);
+}
 
-        auto savedValue = (*containerTable)[name];
-        _onSettingUpdate.FireEvent(UpdatedSettingNotification{container, name, savedValue});
+void SettingsService::SaveSetting(const std::string& container, const std::string& name, const toml::node_view<const toml::node>& value) {
+    if (value) {
+        std::vector<UpdatedSettingNotification> notifications;
+        {
+            std::lock_guard<std::recursive_mutex> lock(_mutex);
+            auto containerTable = _settings[container].as_table();
+            if (!containerTable) {
+                _settings.insert_or_assign(container, toml::table{});
+                containerTable = _settings[container].as_table();
+            }
+            containerTable->insert_or_assign(name, *value.node());
+            WriteToFile();
+            notifications.emplace_back(container, name, (*containerTable)[name]);
+        }
+        Fire(notifications);
     }
 }
 

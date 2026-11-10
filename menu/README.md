@@ -5,7 +5,7 @@ and how to install it, see the [project README](../README.md).
 
 | File | What it is |
 |---|---|
-| `magicpods-menu.js` | The menu itself. Runs inside Steam's VR bottom bar and quick menu, and talks to MagicPodsCore on `ws://127.0.0.1:2020`. |
+| `magicpods-menu.js` | The menu itself. Runs inside Steam's VR bottom bar and quick menu, and talks to the Tragus core on `ws://127.0.0.1:2020`. |
 | `magicpods-steamui.py` | A small background service (Python 3, standard library only). Keeps the current menu in Steam's pages, shows low-battery notifications and runs the standby fix. |
 | `magicpods-steamui.service` | Its systemd user unit. |
 | `install.sh`, `uninstall.sh` | Set it up or remove it for the current user (no root). |
@@ -23,7 +23,7 @@ and how to install it, see the [project README](../README.md).
 Updating is the same as installing: run the new release's `install.sh`. Within a few
 seconds the service replaces the menu in Steam's pages; Steam does not need a restart.
 `uninstall.sh` stops the service, removes the menu from Steam's pages and deletes the
-files. MagicPodsCore and its settings are not touched.
+files. The Tragus core and its settings are not touched.
 
 ## How each part works
 
@@ -41,7 +41,7 @@ files. MagicPodsCore and its settings are not touched.
   headphones, so switching audio to the speakers does not move it. It uses a little more
   battery while on.
 - **Settings:** the menu's own display choices are kept in Steam's browser storage; the
-  notification threshold and the standby fix are kept in MagicPodsCore's settings file
+  notification threshold and the standby fix are kept in the core's settings file
   under `[magicpodsframe]`, so the background service can read them.
 
 ## Troubleshooting

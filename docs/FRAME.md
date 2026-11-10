@@ -21,7 +21,7 @@ what the installer does, check an install, or debug one.
 - Installs `magicpodscore.service` as a **systemd user service** and starts it. It waits
   up to 30 s for Bluetooth at startup and restarts on failure.
 
-No root, no special permissions: MagicPodsCore talks to BlueZ and PipeWire as your user
+No root, no special permissions: the Tragus core talks to BlueZ and PipeWire as your user
 and uses no raw sockets.
 
 ## Requirements (all present on SteamOS for the Frame)
@@ -43,8 +43,8 @@ bus, and PipeWire with its PulseAudio layer. Checked on SteamOS VR 0.5.8 (glibc 
 
 - Ear detection pauses media when an earbud comes out (`ear_pause_media`, on by
   default) and can move audio to the Frame's speakers when both are out
-  (`ear_switch_to_speakers`). Both are in the MagicPods menu.
-- The MagicPods menu keeps its own settings in the same file, under `[magicpodsframe]`:
+  (`ear_switch_to_speakers`). Both are in the Tragus menu.
+- The Tragus menu keeps its own settings in the same file, under `[magicpodsframe]`:
   `low_battery` (notification threshold in %, 0 = off, default 30) and `standby_fix`
   ("Disable headphone standby mode", default off).
 
@@ -62,6 +62,6 @@ pactl get-default-sink; pactl list sinks short
 If your headphones are listed but show no noise control or ear detection, check that
 BlueZ reports an Apple `Modalias` for them (`bluetooth:v004C...`):
 `busctl --system get-property org.bluez /org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF org.bluez.Device1 Modalias`.
-Models MagicPodsCore does not know are handled as a generic headset, with fewer features.
+Models the core does not know are handled as a generic headset, with fewer features.
 
-Only one MagicPodsCore can run at a time (the port is exclusive); a second copy exits.
+Only one copy of the Tragus core can run at a time (the port is exclusive); a second copy exits.

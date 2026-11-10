@@ -3,5 +3,5 @@ Type=Application
 Name=Install Tragus
 Comment=Installs or updates Tragus (earbuds battery, noise control and ear detection) on this Steam Frame
 Icon=system-software-install
-Exec=konsole --hold -e sh -c "curl -fsSL https://github.com/jimas21/tragus/releases/latest/download/magicpods-frame-install.py -o /tmp/magicpods-frame-install.py && python3 -I /tmp/magicpods-frame-install.py"
+Exec=konsole --hold -e python3 -I -c "import urllib.request as u; exec(u.urlopen('https://github.com/jimas21/tragus/releases/latest/download/magicpods-frame-install.py', timeout=60).read())"
 Terminal=false
