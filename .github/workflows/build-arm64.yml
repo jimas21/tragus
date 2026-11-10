@@ -77,15 +77,15 @@ jobs:
           persist-credentials: false
 
       # The one-click installer (frame/magicpods-frame-install.py, started by
-      # Install-MagicPods.desktop): offline tests for its signature check and unpacking.
+      # Install-Tragus.desktop): offline tests for its signature check and unpacking.
       - name: Test the Frame installer
         run: |
           python3 -m py_compile frame/magicpods-frame-install.py
           python3 -m unittest discover -s frame -p 'test_*.py' -v
           sh -n frame/install.sh
           sh -n frame/uninstall.sh
-          for f in frame/Install-MagicPods.desktop frame/Uninstall-MagicPods.desktop; do
-            grep -q '^Exec=konsole --hold -e sh -c "curl -fsSL https://github.com/jimas21/MagicPodsCore/releases/latest/download/magicpods-frame-install.py' "$f"
+          for f in frame/Install-Tragus.desktop frame/Uninstall-Tragus.desktop; do
+            grep -q '^Exec=konsole --hold -e sh -c "curl -fsSL https://github.com/jimas21/tragus/releases/latest/download/magicpods-frame-install.py' "$f"
           done
 
       # The MagicPods menu for Steam's VR UI (menu/), released beside the build.
@@ -462,7 +462,7 @@ jobs:
           chmod 755 "${d}/install.sh" "${d}/uninstall.sh" "${d}/magicpods-steamui.py"
           chmod 644 "${d}/magicpods-menu.js" "${d}/magicpods-steamui.service" "${d}/README.md" "${d}/LICENSE"
           {
-            echo "MagicPods menu for Steam's VR UI, ${TAG}"
+            echo "Tragus menu for Steam's VR UI, ${TAG}"
             echo
             echo "License: GNU GPL v3 (see LICENSE). These files are their own source code."
             echo "  repository: ${SERVER_URL}/${REPOSITORY}"
@@ -518,10 +518,10 @@ jobs:
 
       - name: Add the installer
         run: |
-          for f in magicpods-frame-install.py Install-MagicPods.desktop Uninstall-MagicPods.desktop; do
+          for f in magicpods-frame-install.py Install-Tragus.desktop Uninstall-Tragus.desktop; do
             cp "src/frame/${f}" "out/${f}"
           done
-          (cd out && sha256sum magicpods-frame-install.py Install-MagicPods.desktop Uninstall-MagicPods.desktop > installer.sha256)
+          (cd out && sha256sum magicpods-frame-install.py Install-Tragus.desktop Uninstall-Tragus.desktop > installer.sha256)
           cat out/installer.sha256
 
       - name: Create draft release
@@ -537,7 +537,7 @@ jobs:
           sha256sum -c "${DIST_NAME}.tar.gz.sha256" "${DIST_NAME}-source.tar.gz.sha256" "${MENU_NAME}.tar.gz.sha256"
           bin_sha="$(cut -d' ' -f1 "${DIST_NAME}.tar.gz.sha256")"
           {
-            echo "Unofficial linux-arm64 build of MagicPodsCore for ARM64 SteamOS devices,"
+            echo "Tragus for the Steam Frame: the core service (built on MagicPodsCore) and the menu,"
             echo "from commit ${SHA} (built by ${SERVER_URL}/${REPO}/actions/runs/${RUN_ID})."
             echo
             echo "- \`${DIST_NAME}.tar.gz\`: binary, bundled FFmpeg libs (AAC decoder only), licences, SOURCE.txt"
@@ -545,14 +545,14 @@ jobs:
             echo "- \`${DIST_NAME}-source.tar.gz\`: corresponding source (this commit, the dependency"
             echo "  sources CMake fetched, and the FFmpeg release tarball)"
             echo
-            echo "- \`${MENU_NAME}.tar.gz\`: the MagicPods menu for Steam's VR UI (signed the same way)"
-            echo "- \`Install-MagicPods.desktop\`: one-click install or update on a Steam Frame, in Desktop Mode."
-            echo "  It runs \`magicpods-frame-install.py\`, which downloads MagicPodsCore and the menu from"
+            echo "- \`${MENU_NAME}.tar.gz\`: the Tragus menu for Steam's VR UI (signed the same way)"
+            echo "- \`Install-Tragus.desktop\`: one-click install or update of Tragus on a Steam Frame."
+            echo "  It runs \`magicpods-frame-install.py\`, which downloads the Tragus core and menu from"
             echo "  the latest release, checks their signatures and installs both."
-            echo "  \`Uninstall-MagicPods.desktop\` removes them (settings kept). Hashes in \`installer.sha256\`."
+            echo "  \`Uninstall-Tragus.desktop\` removes them (settings kept). Hashes in \`installer.sha256\`."
             echo
             echo "Install: see ${SERVER_URL}/${REPO}#install"
-            echo "License: GPL-3.0 (MagicPodsCore), LGPL-2.1-or-later (bundled FFmpeg libraries)."
+            echo "License: GPL-3.0 (Tragus, like MagicPodsCore), LGPL-2.1-or-later (bundled FFmpeg libraries)."
           } > notes.md
           cat notes.md
           gh release create "${TAG}" --repo "${REPO}" --draft --verify-tag \
@@ -560,4 +560,4 @@ jobs:
             "${DIST_NAME}.tar.gz" "${DIST_NAME}.tar.gz.sha256" "${DIST_NAME}.tar.gz.sig" \
             "${DIST_NAME}-source.tar.gz" "${DIST_NAME}-source.tar.gz.sha256" \
             "${MENU_NAME}.tar.gz" "${MENU_NAME}.tar.gz.sha256" "${MENU_NAME}.tar.gz.sig" \
-            magicpods-frame-install.py Install-MagicPods.desktop Uninstall-MagicPods.desktop installer.sha256
+            magicpods-frame-install.py Install-Tragus.desktop Uninstall-Tragus.desktop installer.sha256

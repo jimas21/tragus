@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Puts the MagicPods menu into Steam's VR UI (ARM64 SteamOS, e.g. Steam Frame).
+"""Puts the Tragus menu into Steam's VR UI (ARM64 SteamOS, e.g. Steam Frame).
 
 Every few seconds this lists Steam's UI pages through Steam's local Chrome DevTools
 endpoint (127.0.0.1:8080, present because Steam runs with -cef-enable-debugging; the
@@ -179,7 +179,7 @@ def low_battery_message(parts):
     buds = [(k, p) for k, p in parts if k != "case"]
     case = [p for k, p in parts if k == "case"]
     if not buds:
-        return f"MagicPods: Charging case {case[0]}% remaining. Charge the case."
+        return f"Tragus: Charging case {case[0]}% remaining. Charge the case."
     items = []
     for k, p in buds:
         name = PART_NAMES[k]
@@ -187,7 +187,7 @@ def low_battery_message(parts):
     if case:
         items.append(f"charging case {case[0]}%")
     text = ", ".join(items)
-    return f"MagicPods: {text[0].upper()}{text[1:]} remaining. Charge your headphones."
+    return f"Tragus: {text[0].upper()}{text[1:]} remaining. Charge your headphones."
 
 
 class StandbyFix(threading.Thread):
@@ -350,7 +350,7 @@ class StandbyFix(threading.Thread):
         """Start the signed installer with --if-newer in its own user unit (it restarts
         this service, which would otherwise end it halfway)."""
         if not os.path.isfile(UPDATER):
-            self.write_update_status("failed", "Updates need a newer MagicPods: install it once more from the install button.")
+            self.write_update_status("failed", "Updates need a newer Tragus: install it once more from the install button.")
             return
         if self.update_running():
             log("an update is already running")
@@ -457,7 +457,7 @@ class StandbyFix(threading.Thread):
                 [self.player, "--playback", "--raw", "--rate", "48000", "--channels", "2", "--format", "s16",
                  "--target", sink, "--latency", "500ms",
                  "-P", "node.dont-reconnect=true", "-P", "node.dont-fallback=true",
-                 "-P", "media.name=MagicPods standby fix", "-P", "node.name=magicpods-standby-fix", "-"],
+                 "-P", "media.name=Tragus standby fix", "-P", "node.name=magicpods-standby-fix", "-"],
                 stdin=zero, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=child_setup)
         finally:
             zero.close()

@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Uninstall MagicPods
-Comment=Removes MagicPods from this Steam Frame (your headphone settings are kept)
-Icon=edit-delete
-Exec=konsole --hold -e sh -c "curl -fsSL https://github.com/jimas21/MagicPodsCore/releases/latest/download/magicpods-frame-install.py -o /tmp/magicpods-frame-install.py && python3 -I /tmp/magicpods-frame-install.py --uninstall"
-Terminal=false

@@ -1,4 +1,4 @@
-# MagicPodsCore on the Steam Frame: technical notes
+# Tragus core on the Steam Frame: technical notes
 
 For installing, see the [README](../README.md). This page is for people who want to know
 what the installer does, check an install, or debug one.

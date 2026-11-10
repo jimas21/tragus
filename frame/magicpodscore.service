@@ -1,6 +1,6 @@
 # MagicPodsCore as a systemd --user service (installed by install.sh).
 [Unit]
-Description=MagicPodsCore (headphone control, local WebSocket on port 2020)
+Description=Tragus core, from MagicPodsCore (headphone control, local WebSocket on port 2020)
 After=pipewire-pulse.socket
 Wants=pipewire-pulse.socket
 StartLimitIntervalSec=120

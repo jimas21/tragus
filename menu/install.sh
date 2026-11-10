@@ -8,7 +8,7 @@ units="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 
 command -v python3 >/dev/null 2>&1 || { echo "error: python3 is required" >&2; exit 1; }
 if ! systemctl --user cat magicpodscore.service >/dev/null 2>&1; then
-    echo "warning: magicpodscore.service not found; install MagicPodsCore first" >&2
+    echo "warning: magicpodscore.service not found; install the Tragus core first" >&2
 fi
 
 mkdir -p "$dest" "$units"
@@ -42,7 +42,7 @@ systemctl --user enable magicpods-steamui.service
 systemctl --user restart magicpods-steamui.service
 sleep 1
 if systemctl --user is-active --quiet magicpods-steamui.service; then
-    echo "MagicPods menu installed and running."
+    echo "Tragus menu installed and running."
 else
     echo "error: magicpods-steamui.service did not start; see: journalctl --user -u magicpods-steamui" >&2
     exit 1

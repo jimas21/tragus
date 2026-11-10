@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Install, update or remove MagicPods on a Steam Frame, for the current user. No root.
+"""Install, update or remove Tragus on a Steam Frame, for the current user. No root.
 
-Downloads MagicPodsCore and the MagicPods menu from the latest release of
-  https://github.com/jimas21/MagicPodsCore
+Downloads the Tragus core service and menu from the latest release of
+  https://github.com/jimas21/tragus
 checks each one's ed25519 signature against the public key pinned below, unpacks it
 safely and runs its own install.sh. Your headphone settings are never overwritten.
 
-Usually started by Install-MagicPods.desktop (Desktop Mode), or by hand:
+Usually started by Install-Tragus.desktop (Desktop Mode), or by hand:
   python3 magicpods-frame-install.py              install or update both
   python3 magicpods-frame-install.py --uninstall  remove both (settings kept)
   python3 magicpods-frame-install.py --uninstall --purge   also delete the settings
-The MagicPods menu runs the copy kept in ~/.local/share/magicpodscore/ with --if-newer
+The Tragus menu runs the copy kept in ~/.local/share/magicpodscore/ with --if-newer
 --status-file for its "Check for updates" button and automatic updates.
 
 Python standard library only. Licence: GPL-3.0, like MagicPodsCore.
@@ -35,13 +35,13 @@ import urllib.request
 USER_AGENT = "magicpods-frame-install"
 MAX_DOWNLOAD = 64 * 1024 * 1024
 
-REPO = "jimas21/MagicPodsCore"
+REPO = "jimas21/tragus"
 PUBKEY = "GOT1qW3jXgAMmr3pyoQece9CnIIrNlgiZysjnNC/Hdk="
 
 COMPONENTS = [
     {
         "key": "core",
-        "name": "MagicPodsCore",
+        "name": "Tragus core",
         "repo": REPO,
         "asset": "magicpodscore-linux-arm64.tar.gz",
         "top": "magicpodscore-linux-arm64",
@@ -50,7 +50,7 @@ COMPONENTS = [
     },
     {
         "key": "menu",
-        "name": "MagicPods menu",
+        "name": "Tragus menu",
         "repo": REPO,
         "asset": "magicpods-frame-menu.tar.gz",
         "top": "magicpods-frame-menu",
@@ -333,7 +333,7 @@ def take_lock():
         fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         f.close()
-        raise InstallError("another MagicPods install or update is running; try again in a minute") from None
+        raise InstallError("another Tragus install or update is running; try again in a minute") from None
     return f
 
 
@@ -356,7 +356,7 @@ def install(args, status):
                 if installed.get(c["key"]) != tags[c["key"]]
                 and version_key(tags[c["key"]]) > version_key(installed.get(c["key"]) or "")]
         if not todo:
-            print("MagicPods is up to date.")
+            print("Tragus is up to date.")
             status.set("uptodate", "Up to date")
             return
     menu_was_running = args.download_only or subprocess.run(
@@ -386,11 +386,11 @@ def install(args, status):
     if lock:
         lock.close()
     print()
-    print("MagicPods is installed.")
+    print("Tragus is installed.")
     print("- Pair your headphones in Steam Settings > Bluetooth if you have not yet.")
     if not menu_was_running:
-        print("- Restart the headset once, so Steam shows the MagicPods menu.")
-    print("- MagicPods keeps itself up to date (MagicPods menu > Settings > Updates).")
+        print("- Restart the headset once, so Steam shows the Tragus menu.")
+    print("- Tragus keeps itself up to date (Tragus menu > Settings > Updates).")
 
 
 def uninstall(args):
@@ -402,7 +402,7 @@ def uninstall(args):
                 conf = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "magicpods")
                 if os.path.isdir(conf):
                     shutil.rmtree(conf)
-                    print("MagicPods settings deleted.")
+                    print("Tragus settings deleted.")
             continue
         cmd = ["sh", script]
         if args.purge and c["name"] == "MagicPodsCore":
@@ -414,8 +414,8 @@ def uninstall(args):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Install, update or remove MagicPods on a Steam Frame.")
-    ap.add_argument("--uninstall", action="store_true", help="remove MagicPods")
+    ap = argparse.ArgumentParser(description="Install, update or remove Tragus on a Steam Frame.")
+    ap.add_argument("--uninstall", action="store_true", help="remove Tragus")
     ap.add_argument("--purge", action="store_true",
                     help="with --uninstall: also delete the settings (they hold the headphones' pairing keys)")
     ap.add_argument("--download-only", metavar="DIR",

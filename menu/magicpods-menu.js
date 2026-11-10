@@ -300,7 +300,7 @@
 
   // ---------- pages ----------
   function pageDevice() {
-    if (core.badVersion) return `<div class="mp-msg">Please update MagicPods to continue.</div>`;
+    if (core.badVersion) return `<div class="mp-msg">Please update Tragus to continue.</div>`;
     if (!core.ready) return '';
     const info = core.info;
     if (!info) return `<div class="mp-msg">Connect headphones to display their battery level and adjust settings.</div>`;
@@ -448,7 +448,7 @@
     const st = updateStatus();
     let h = `<div class="mp-h">Updates</div>` + toggleRow('Update automatically', auto, (v) => {
       core.frameSettings.auto_update = v; coreSend('SetSetting', { container: 'magicpodsframe', setting: 'auto_update', value: v }); render();
-    }, { note: 'Checks for a new MagicPods every few hours and installs it.' });
+    }, { note: 'Checks for a new Tragus every few hours and installs it.' });
     const label = st && st.busy ? st.message : 'Check for updates';
     h += `<div class="mp-row mp-col${st && st.busy ? ' mp-dis' : ''}"><div class="mp-choice"><button data-mp="${on(() => {
       if (st && st.busy) return;
@@ -468,7 +468,7 @@
     h += `<div class="mp-h">Menu</div>` +
       toggleRow('Auto-select tab', !!settings.auto_tab, (v) => saveSettings({ auto_tab: v }), { note: 'When opening the menu, show Devices if no headphones are connected.' }) +
       choiceRow('Clicking the battery icon', [{ value: 'menu', label: 'Opens this menu' }, { value: 'cycle', label: 'Cycles noise control' }], settings.click_action, (v) => saveSettings({ click_action: v }),
-        { note: 'With "Cycles noise control", open the menu from the MagicPods tab or Battery Info.' });
+        { note: 'With "Cycles noise control", open the menu from the Tragus tab or Battery Info.' });
     h += `<div class="mp-h">Battery</div>` + sliderRow('Low battery notification', { min: 0, max: 100, value: lowThreshold(), unit: '%', offAtZero: true }, (v) => {
         core.frameSettings.low_battery = v; coreSend('SetSetting', { container: 'magicpodsframe', setting: 'low_battery', value: v }); render();
       });
@@ -490,7 +490,7 @@
         });
       }
       h += pageUpdates();
-      h += `<div class="mp-note" style="margin-top:10px">MagicPodsCore ${esc(core.version || '')}</div>`;
+      h += `<div class="mp-note" style="margin-top:10px">Tragus core ${esc(core.version || '')}</div>`;
     }
     return h + '</div>';
   }
@@ -547,7 +547,7 @@
       tab.id = TAB_ID;
       tab.dataset.mpVersion = VERSION;
       tab.className = common.join(' ');
-      tab.setAttribute('aria-label', 'MagicPods');
+      tab.setAttribute('aria-label', 'Tragus');
       tab.setAttribute('role', 'button');
       tab.innerHTML = EARBUDS_ICON.replace('width="20" height="20"', 'width="26" height="26"');
       tab.style.display = 'flex'; tab.style.alignItems = 'center'; tab.style.justifyContent = 'center'; tab.style.color = 'currentColor';
@@ -660,7 +660,7 @@
     let h = `<div class="mp-tabs">` + tabs.map(([k, label]) =>
       `<button class="${settings.tab === k ? 'mp-on' : ''}" data-mp="${on(() => saveSettings({ tab: k }))}">${label}</button>`).join('') + `</div>`;
     if (!core.ready && !core.badVersion) {
-      h += `<div class="mp-banner"><span>MagicPods service is not reachable.</span><button data-mp="${on(() => { clearTimeout(core.timer); coreConnect(); })}">Retry</button></div>`;
+      h += `<div class="mp-banner"><span>Tragus service is not reachable.</span><button data-mp="${on(() => { clearTimeout(core.timer); coreConnect(); })}">Retry</button></div>`;
     }
     h += settings.tab === 'headphones' ? pageHeadphones() : settings.tab === 'settings' ? pageSettings() : pageDevice();
     const top = overlay.scrollTop;

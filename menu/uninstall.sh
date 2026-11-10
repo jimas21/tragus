@@ -18,4 +18,4 @@ fi
 systemctl --user daemon-reload
 rm -rf "$dest"
 rmdir "$HOME/.local/share/magicpods-app" 2>/dev/null
-echo "MagicPods menu removed."
+echo "Tragus menu removed."

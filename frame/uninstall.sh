@@ -9,7 +9,7 @@ systemctl --user daemon-reload
 rm -rf "$HOME/.local/share/magicpodscore"
 if [ "${1:-}" = "--purge" ]; then
     rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/magicpods"
-    echo "MagicPodsCore and its settings removed."
+    echo "Tragus core and its settings removed."
 else
-    echo "MagicPodsCore removed (settings kept in ~/.config/magicpods)."
+    echo "Tragus core removed (settings kept)."
 fi

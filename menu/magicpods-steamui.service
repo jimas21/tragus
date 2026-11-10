@@ -1,7 +1,7 @@
 # Puts the MagicPods menu into Steam's VR UI: an earbuds battery indicator in the top
 # bar and a MagicPods tab in the quick-access popup. Installed by install.sh.
 [Unit]
-Description=MagicPods menu in Steam's VR UI
+Description=Tragus menu in Steam's VR UI
 After=magicpodscore.service
 Wants=magicpodscore.service
 

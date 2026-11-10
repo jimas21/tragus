@@ -52,7 +52,7 @@ for i in $(seq 1 40); do
     sleep 1
 done
 if [ "$state" = active ]; then
-    echo "MagicPodsCore installed and running."
+    echo "Tragus core installed and running."
 else
     echo "error: magicpodscore.service did not start; see: journalctl --user -u magicpodscore" >&2
     exit 1

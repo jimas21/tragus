@@ -1,6 +1,6 @@
-# MagicPods menu for Steam's VR interface (Steam Frame)
+# Tragus menu for Steam's VR interface (Steam Frame)
 
-The files in this folder make up the MagicPods menu on the Steam Frame. For what it does
+The files in this folder make up the Tragus menu on the Steam Frame. For what it does
 and how to install it, see the [project README](../README.md).
 
 | File | What it is |
