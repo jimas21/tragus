@@ -3,5 +3,5 @@ Type=Application
 Name=Uninstall Tragus
 Comment=Removes Tragus from this Steam Frame (your headphone settings are kept)
 Icon=edit-delete
-Exec=konsole --hold -e python3 -I -c "import urllib.request as u; exec(u.urlopen('https://github.com/jimas21/tragus/releases/latest/download/magicpods-frame-install.py', timeout=60).read())" --uninstall
+Exec=konsole --hold -e python3 -I -c "import sys,urllib.request as u; sys.excepthook=lambda *e: print('Could not download the Tragus installer. Check that the headset is online, then try again.'); exec(u.urlopen('https://github.com/jimas21/tragus/releases/latest/download/magicpods-frame-install.py', timeout=60).read())" --uninstall
 Terminal=false

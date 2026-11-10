@@ -32,6 +32,10 @@ import tempfile
 import time
 import urllib.request
 
+# The .desktop launchers replace the excepthook so a failed download prints one plain line.
+# Once this file is running, errors are this file's own: show them normally.
+sys.excepthook = sys.__excepthook__
+
 USER_AGENT = "magicpods-frame-install"
 MAX_DOWNLOAD = 64 * 1024 * 1024
 

@@ -3,6 +3,9 @@
 import importlib.util
 import io
 import os
+import pathlib
+import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -137,6 +140,46 @@ class CliTests(unittest.TestCase):
     def test_purge_needs_uninstall(self):
         with self.assertRaises(SystemExit):
             mpi.main(["--purge"])
+
+
+def _launcher_code(name):
+    """The python3 -c program and trailing arguments from a .desktop launcher's Exec line."""
+    with open(os.path.join(_HERE, name), encoding="utf-8") as f:
+        line = next(l for l in f.read().splitlines() if l.startswith("Exec="))
+    head, code, tail = line.split('"')
+    assert head == "Exec=konsole --hold -e python3 -I -c ", head
+    return code, tail.split()
+
+
+class LauncherTests(unittest.TestCase):
+    URL = "https://github.com/jimas21/tragus/releases/latest/download/magicpods-frame-install.py"
+
+    def _run(self, name, url, extra=()):
+        code, args = _launcher_code(name)
+        self.assertIn(self.URL, code)
+        code = code.replace(self.URL, url)
+        return subprocess.run([sys.executable, "-I", "-c", code, *args, *extra],
+                              capture_output=True, text=True, timeout=60)
+
+    def test_offline_prints_plain_message(self):
+        for name in ("Install-Tragus.desktop", "Uninstall-Tragus.desktop"):
+            with self.subTest(name=name):
+                r = self._run(name, "http://127.0.0.1:9/magicpods-frame-install.py")
+                self.assertIn("Could not download the Tragus installer", r.stdout)
+                self.assertNotIn("Traceback", r.stderr)
+
+    def test_installer_runs_and_restores_errors(self):
+        url = pathlib.Path(_HERE, "magicpods-frame-install.py").as_uri()
+        r = self._run("Install-Tragus.desktop", url, ["--help"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("--uninstall", r.stdout)
+        # Arguments after the -c program reach the installer, and its own errors print normally
+        # (a bad flag, so nothing is really uninstalled).
+        r = self._run("Uninstall-Tragus.desktop", url, ["--no-such-flag"])
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("--no-such-flag", r.stderr)
+        self.assertNotIn("Could not download", r.stdout)
+        self.assertIs(mpi.sys.excepthook, sys.__excepthook__)
 
 
 if __name__ == "__main__":
